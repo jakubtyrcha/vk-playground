@@ -182,9 +182,3 @@ void generate_plane(SvoPool & pool, Plane plane, Obb cube, i32 max_octree_depth,
     // traverse the bricks bottom-top to build the nodes structure
 }
 
-// test
-// different swizzle, brick params (resolution & node centers), depth (0, 1, 5)
-
-// build plane SVO
-// cast a few rays, hits & misses, ray in an opposite direction
-// color interpolation, volume accumulation

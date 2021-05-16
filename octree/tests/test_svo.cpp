@@ -13,7 +13,7 @@ enum class BrickLayout {
     Morton
 };
 
-template<i32 BRICK_SIZE, BrickLayout BRICK_LAYOUT> 
+template<i32 BRICK_SIZE, BrickLayout BRICK_LAYOUT = BrickLayout::Linear> 
 struct BrickPayload {
     std::array<Vec4, cube(BRICK_SIZE)> colors;
 
@@ -46,8 +46,17 @@ struct Svo {
 
 };
 
+SvoPool<8, BrickVoxelPosition::NodeCenter>;
+SvoPool<8, BrickVoxelPosition::NodeCorner>;
+
+// smallest
+SvoPool<3, BrickVoxelPosition::NodeCenter>;
+SvoPool<2, BrickVoxelPosition::NodeCorner>;
+
+// test brick sampling: linear and swizzle
+
 TEST_CASE( "Can build SVO from pre-authored voxels", "[svo]" ) {
-    SvoPool<8, BrickVoxelPosition::NodeCenter, BrickLayout::Linear> pool;
+    SvoPool<8, BrickVoxelPosition::NodeCenter> pool;
     //pool.reset(5, 100, 1000);
 
     Svo svo{pool, Obb{}};
@@ -57,3 +66,10 @@ TEST_CASE( "Can build SVO from pre-authored voxels", "[svo]" ) {
     //std::optional<Hit> hit = svo.cast_ray(ray);
     //REQUIRE(hit);
 }
+
+// test
+// different swizzle, brick params (resolution & node centers), depth (0, 1, 5)
+
+// build plane SVO
+// cast a few rays, hits & misses, ray in an opposite direction
+// color interpolation, volume accumulation
