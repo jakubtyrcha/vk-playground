@@ -190,6 +190,9 @@ struct Svo {
     }
 
     std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord) const {
+        static_assert(false);
+        // TODO: include border for brick coord! 
+
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 2);
             return std::make_tuple(brick_id, voxel_coord - brick_id * (TPool::BRICK_SIZE - 2));
@@ -272,9 +275,12 @@ struct Svo {
             }
         }
 
-        // per level
-            // copy bricks to neighbours
-            // downsample
+        // iterate leaf bricks
+        // copy edges to neighbour bricks! (might need to allocate new nodes!)
+        // gen list of parent nodes
+
+        // per level until root
+            // 
     }
 };
 
