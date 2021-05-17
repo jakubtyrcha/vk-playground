@@ -108,10 +108,9 @@ struct SvoPool {
     static constexpr i32 BRICK_SIZE = BRICK_SIZE;
 
     std::vector<OctreeNode> nodes_pool_;
-    i32 next_node_ = 0;
     std::vector<BrickType> brick_pool_;
-    std::unordered_map<Vec3i, i32> leaf_brick_index_;
-    i32 max_depth_ = -1;
+    i32 next_node_ = 0;
+    i32 next_brick_ = 0;
 
     SvoPool() {
         if constexpr(BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
@@ -122,8 +121,7 @@ struct SvoPool {
         }
     }
 
-    void reset(i32 max_depth, i32 reserve_nodes, i32 reserve_bricks) {
-        max_depth_ = max_depth;
+    void reset(i32 reserve_nodes, i32 reserve_bricks) {
         next_node_ = 0;
         nodes_pool_.resize(reserve_nodes);
         brick_pool_.resize(reserve_bricks);
@@ -135,21 +133,24 @@ struct SvoPool {
         return offset;
     }
 
-    i32 get_brick_res() const {
-        return 1 << max_depth_;
+    i32 alloc_brick() {
+        return next_brick_++;
     }
 
     OctreeNode& get_node(i32 index) {
-        return nodes_pool_[index];
+        return nodes_pool_.at(index);
     }
 
-    BrickType& get_leaf_brick(Vec3i id) {
-        auto iter = leaf_brick_index_.find(id);
-        if(iter == leaf_brick_index_.end()) {
-            iter = leaf_brick_index_.insert(std::make_pair(id, static_cast<i32>(leaf_brick_index_.size()))).first;
-            brick_pool_[iter->second].init();
-        }
-        return brick_pool_[iter->second];
+    const OctreeNode& get_node(i32 index) const {
+        return nodes_pool_.at(index);
+    }
+
+    BrickType& get_brick(i32 index) {
+        return brick_pool_.at(index);
+    }
+
+    const BrickType& get_brick(i32 index) const {
+        return brick_pool_.at(index);
     }
 };
 
@@ -158,17 +159,30 @@ struct Svo {
     TPool & pool_;
     Obb obb_;
     i32 root_ = -1;
+    i32 max_depth_;
 
-    Svo(TPool & pool, Obb const& obb) : pool_{pool}, obb_{obb} {}
+    static constexpr i32 MAX_DEPTH = 10;
+
+    std::unordered_map<Vec4i, i32> brick_to_address_;
+
+    struct BrickInfo {
+        Vec3i id;
+        i32 address;
+    };
+    std::array<std::vector<BrickInfo>, MAX_DEPTH> bricks_at_depth_; 
+
+    Svo(TPool & pool, Obb const& obb, i32 max_depth) : pool_{pool}, obb_{obb}, max_depth_{max_depth} {}
+
+    i32 get_bricks_num_per_side() const {
+        return 1 << max_depth_;
+    }
 
     i32 get_voxel_res() const {
-        const i32 brick_res = pool_.get_brick_res();
+        const i32 brick_res = get_bricks_num_per_side();
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
-            // *-|-*--*-|-*
             return brick_res * (TPool::BRICK_SIZE - 2);
         }
         else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
-            // |*--*--*|
             return brick_res * (TPool::BRICK_SIZE - 1);
         }
     }
@@ -190,13 +204,12 @@ struct Svo {
     }
 
     std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord) const {
-        static_assert(false);
-        // TODO: include border for brick coord! 
-
+        // *-|-*--*-|-*
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 2);
-            return std::make_tuple(brick_id, voxel_coord - brick_id * (TPool::BRICK_SIZE - 2));
+            return std::make_tuple(brick_id, voxel_coord - brick_id * (TPool::BRICK_SIZE - 2) + 1);
         }
+        // |*--*--*|
         else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 1);
             return std::make_tuple(brick_id, voxel_coord - brick_id * (TPool::BRICK_SIZE - 1));
@@ -223,7 +236,8 @@ struct Svo {
         auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(Vec3i{voxel_coord});
 
         // allocate brick, set value
-        auto& brick = pool_.get_leaf_brick(brick_id);
+        
+        auto& brick = get_or_insert_brick({brick_id, max_depth_});
         brick.set_voxel_color(brick_coord, color);
     }
 
@@ -238,18 +252,66 @@ struct Svo {
         node.a = 0;
     }
 
-    void build_tree() {
-        std::array<Vec4i, 16> stack;
+    TPool::BrickType & get_or_insert_brick(Vec4i id_depth) {
+        // todo: don't create bricks outside of borders
+        auto iter = brick_to_address_.find(id_depth);
+        if(iter == brick_to_address_.end()) {
+            iter = brick_to_address_.insert(std::make_pair(id_depth, pool_.alloc_brick())).first;
+            pool_.get_brick(iter->second).init();
+        }
+        return pool_.get_brick(iter->second);
+    }
 
-        // create tree structure
-        for(const auto & key_value : pool_.leaf_brick_index_) {
-            i32 depth = pool_.max_depth_;
-            Vec3i brick = key_value.first;
-            i32 address = key_value.second;
+    struct CopySpan
+    {
+        Vec3i begin;
+        Vec3i end;
+        Vec3i brick_neighbour_offset;
+    };
+
+    void copy_border(Vec4i current_brick, i32 current_address, CopySpan const & span) 
+    {
+        auto const & src_brick = pool_.get_brick(current_address);
+        bool needs_copy = false;
+        for(i32 z=span.begin.z; z<span.end.z; z++) {
+            for(i32 y=span.begin.y; y<span.end.y; y++) {
+                for(i32 x=span.begin.x; x<span.end.x; x++) {
+                    if(src_brick.fetch({x, y, z}) != Vec4{}) {
+                        needs_copy = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if(!needs_copy) {
+            return;
+        }
+
+        Vec3i neighbour = Vec3i{current_brick} + span.brick_neighbour_offset;
+
+        auto & dst_brick = get_or_insert_brick({neighbour, current_brick.w});
+        for(i32 z=span.begin.z; z<span.end.z; z++) {
+            for(i32 y=span.begin.y; y<span.end.y; y++) {
+                for(i32 x=span.begin.x; x<span.end.x; x++) {
+                    Vec3i dst_texel = (Vec3i{x, y, z} + span.brick_neighbour_offset) % TPool::BRICK_SIZE;
+                    dst_brick.set_voxel_color(dst_texel, src_brick.fetch({x, y, z}));
+                }
+            }
+        }
+    }
+
+    void build_tree() {
+        // create tree structure for the leaf nodes
+        std::array<Vec3i, MAX_DEPTH> stack;
+        
+        for(BrickInfo brick_info : bricks_at_depth_[max_depth_]) {
+            i32 depth = max_depth_;
+            Vec3i brick_id = brick_info.id;
+            i32 address = brick_info.address;
             while(depth >= 0) {
-                Vec4i brick_id_level{brick, depth};
-                stack.at(depth) = brick_id_level;
-                brick /= 2;
+                stack.at(depth) = brick_id;
+                brick_id /= 2;
                 depth--;
             }
 
@@ -259,7 +321,7 @@ struct Svo {
             }
 
             OctreeNode & node = pool_.get_node(root_);
-            for (depth = 1; depth <= pool_.max_depth_; depth++)
+            for (depth = 1; depth <= max_depth_; depth++)
             {
                 if(node.max_subdivision) {
                     node.max_subdivision = 0;
@@ -276,11 +338,36 @@ struct Svo {
         }
 
         // iterate leaf bricks
-        // copy edges to neighbour bricks! (might need to allocate new nodes!)
-        // gen list of parent nodes
+        for (i32 depth = max_depth_; depth >= 0; depth--)
+        {
+            for (BrickInfo brick_info : bricks_at_depth_[depth])
+            {
+                Vec3i brick_id = brick_info.id;
+                i32 address = brick_info.address;
 
-        // per level until root
-            // 
+                // copy edges to neighbour bricks! (might need to allocate new nodes!)
+                if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter)
+                {
+                    // iterate all sides
+                    //static_cast(false);
+                }
+                else if (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
+                {
+                    copy_border({brick_id, depth}, address,
+                                {.begin = Vec3i{},
+                                 .end = {1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1},
+                                 .brick_neighbour_offset = {-1, 0, 0}});
+                    copy_border({brick_id, depth}, address, {.begin = {}, .end = {TPool::BRICK_SIZE - 1, 1, TPool::BRICK_SIZE - 1}, .brick_neighbour_offset = {0, -1, 0}});
+                    copy_border({brick_id, depth}, address, {.begin = {}, .end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 1}, .brick_neighbour_offset = {0, 0, -1}});
+                    //
+                    copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, 1, TPool::BRICK_SIZE - 1}, .brick_neighbour_offset = {-1, -1, 0}});
+                    copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, TPool::BRICK_SIZE - 1, 1}, .brick_neighbour_offset = {-1, 0, -1}});
+                    copy_border({brick_id, depth}, address, {.begin = {}, .end = {TPool::BRICK_SIZE - 1, 1, 1}, .brick_neighbour_offset = {0, -1, -1}});
+                    //
+                    copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, 1, 1}, .brick_neighbour_offset = {-1, -1, -1}});
+                }
+            }
+        }
     }
 };
 

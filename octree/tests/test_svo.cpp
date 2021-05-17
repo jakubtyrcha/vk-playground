@@ -52,14 +52,14 @@ TEMPLATE_TEST_CASE( "Can fill brick texels and do a bilinear sample", "[svo][tem
 }
 
 TEMPLATE_TEST_CASE( "Can build SVO from pre-authored voxels", "[svo][template]",
-(SvoPool<8, BrickVoxelPosition::NodeCenter>),
+//(SvoPool<8, BrickVoxelPosition::NodeCenter>),
 (SvoPool<8, BrickVoxelPosition::NodeCorner>)
 ) {
     TestType pool;
-    pool.reset(3, 10000, 10000);
+    pool.reset(10000, 10000);
 
     Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
-    Svo svo{pool, volume};
+    Svo svo{pool, volume, 3};
 
     const f32 voxel_size = svo.get_voxel_size();
 
@@ -77,6 +77,8 @@ TEMPLATE_TEST_CASE( "Can build SVO from pre-authored voxels", "[svo][template]",
     svo.build_tree();
     
     // test raycast
+    // one hit (0,0,-1) (0,0,1) -> color = 0,1,0,1
+    // one miss (0,0,-1) (1,0,0)
     REQUIRE(1 == 1);
 }
 
