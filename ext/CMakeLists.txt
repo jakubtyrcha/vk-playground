@@ -3,12 +3,6 @@ option(GLFW_BUILD_DOCS "" OFF)
 option(GLFW_INSTALL "" OFF)
 option(GLFW_BUILD_EXAMPLES "" OFF)
 
-option(CATCH_BUILD_TESTING "" OFF)
-option(CATCH_ENABLE_WERROR "" OFF)
-option(CATCH_INSTALL_DOCS "" OFF)
-option(CATCH_INSTALL_HELPERS "" OFF)
-set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1) #remove Catch2 target spam
-
 option(FMT_INSTALL "" OFF)
 option(FMT_DOC "" OFF)
 option(FMT_TEST "" OFF)
@@ -28,13 +22,6 @@ FetchContent_Declare(
     GIT_TAG        0.9.9.8
 )
 FetchContent_MakeAvailable(Glm)
-
-FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2
-    GIT_TAG        v2.12.2
-)
-FetchContent_MakeAvailable(Catch2)
 
 FetchContent_Declare(
     VkBootstrap
