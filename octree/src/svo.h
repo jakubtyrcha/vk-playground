@@ -257,6 +257,7 @@ struct Svo {
         auto iter = brick_to_address_.find(id_depth);
         if(iter == brick_to_address_.end()) {
             iter = brick_to_address_.insert(std::make_pair(id_depth, pool_.alloc_brick())).first;
+            bricks_at_depth_[id_depth.w].push_back({Vec3i{id_depth}, iter->second});
             pool_.get_brick(iter->second).init();
         }
         return pool_.get_brick(iter->second);
@@ -290,6 +291,8 @@ struct Svo {
 
         Vec3i neighbour = Vec3i{current_brick} + span.brick_neighbour_offset;
 
+        // todo: this can fail if outside borders!
+        // also if we created: update parent!
         auto & dst_brick = get_or_insert_brick({neighbour, current_brick.w});
         for(i32 z=span.begin.z; z<span.end.z; z++) {
             for(i32 y=span.begin.y; y<span.end.y; y++) {
@@ -299,6 +302,14 @@ struct Svo {
                 }
             }
         }
+    }
+
+    Vec4 load_voxel_level(Vec3i, i32) {
+        return {};
+    }
+
+    void store_voxel_level(Vec3i, i32, Vec4) {
+
     }
 
     void build_tree() {
@@ -340,6 +351,68 @@ struct Svo {
         // iterate leaf bricks
         for (i32 depth = max_depth_; depth >= 0; depth--)
         {
+            if(depth < max_depth_) 
+            {
+                // todo: upsample from children
+                for (BrickInfo brick_info : bricks_at_depth_[depth])
+                {
+                    Vec3i brick_id = brick_info.id;
+                    i32 address = brick_info.address;
+
+                    if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter)
+                    {
+                        // todo
+                    }
+                    else if (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
+                    {
+                        for (i32 z = 0; z < TPool::BRICK_SIZE - 1; z++)
+                        {
+                            for (i32 y = 0; y < TPool::BRICK_SIZE - 1; y++)
+                            {
+                                for (i32 x = 0; x < TPool::BRICK_SIZE - 1; x++)
+                                {
+                                    Vec3i dst_voxel = brick_id * (TPool::BRICK_SIZE - 1) + Vec3i{x, y, z};
+                                    Vec3i src_voxel = dst_voxel * 2;
+                                    
+                                    Vec4 downsampled{0};
+                                    
+                                    std::array<f32, 3 * 3> kernel_02 {
+                                        1.f / 64.f, 2.f / 64.f, 1.f/ 64.f,
+                                        2.f / 64.f, 4.f / 64.f, 2.f/ 64.f,
+                                        1.f / 64.f, 2.f / 64.f, 1.f/ 64.f
+                                    };
+                                    std::array<f32, 3 * 3> kernel_1 {
+                                        2.f / 64.f, 4.f / 64.f, 2.f/ 64.f,
+                                        4.f / 64.f, 8.f / 64.f, 4.f/ 64.f,
+                                        2.f / 64.f, 4.f / 64.f, 2.f/ 64.f,
+                                    };
+                                    for(i32 i=0; i<3; i++) {
+                                        for (i32 j= 0; j<3; j++)
+                                        {
+                                            downsampled += load_voxel_level(src_voxel - Vec3i{i - 1, j - 1, -1}, depth + 1) * kernel_02.at(i * 3 + j);
+                                        }
+                                    }
+                                    for(i32 i=0; i<3; i++) {
+                                        for (i32 j= 0; j<3; j++)
+                                        {
+                                            downsampled += load_voxel_level(src_voxel - Vec3i{i - 1, j - 1, 0}, depth + 1) * kernel_1.at(i * 3 + j);
+                                        }
+                                    }
+                                    for(i32 i=0; i<3; i++) {
+                                        for (i32 j= 0; j<3; j++)
+                                        {
+                                            downsampled += load_voxel_level(src_voxel - Vec3i{i - 1, j - 1, 1}, depth + 1) * kernel_02.at(i * 3 + j);
+                                        }
+                                    }
+
+                                    store_voxel_level(dst_voxel, depth, downsampled);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             for (BrickInfo brick_info : bricks_at_depth_[depth])
             {
                 Vec3i brick_id = brick_info.id;
@@ -367,6 +440,8 @@ struct Svo {
                     copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, 1, 1}, .brick_neighbour_offset = {-1, -1, -1}});
                 }
             }
+
+            // todo: pass that replaces constant voxels will single color and frees the brick
         }
     }
 };
