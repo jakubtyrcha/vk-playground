@@ -56,7 +56,7 @@ TEMPLATE_TEST_CASE( "Can build SVO from pre-authored voxels", "[svo][template]",
 (SvoPool<8, BrickVoxelPosition::NodeCorner>)
 ) {
     TestType pool;
-    pool.reset(3, 100, 1000);
+    pool.reset(3, 10000, 10000);
 
     Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
     Svo svo{pool, volume};

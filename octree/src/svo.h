@@ -108,8 +108,9 @@ struct SvoPool {
     static constexpr i32 BRICK_SIZE = BRICK_SIZE;
 
     std::vector<OctreeNode> nodes_pool_;
+    i32 next_node_ = 0;
     std::vector<BrickType> brick_pool_;
-    std::unordered_map<Vec3i, i32> brick_index_;
+    std::unordered_map<Vec3i, i32> leaf_brick_index_;
     i32 max_depth_ = -1;
 
     SvoPool() {
@@ -123,18 +124,29 @@ struct SvoPool {
 
     void reset(i32 max_depth, i32 reserve_nodes, i32 reserve_bricks) {
         max_depth_ = max_depth;
+        next_node_ = 0;
         nodes_pool_.resize(reserve_nodes);
         brick_pool_.resize(reserve_bricks);
+    }
+
+    i32 alloc_nodes(i32 num) {
+        i32 offset = next_node_;
+        next_node_ += num;
+        return offset;
     }
 
     i32 get_brick_res() const {
         return 1 << max_depth_;
     }
 
-    BrickType& get_brick(Vec3i id) {
-        auto iter = brick_index_.find(id);
-        if(iter == brick_index_.end()) {
-            iter = brick_index_.insert(std::make_pair(id, static_cast<i32>(brick_index_.size()))).first;
+    OctreeNode& get_node(i32 index) {
+        return nodes_pool_[index];
+    }
+
+    BrickType& get_leaf_brick(Vec3i id) {
+        auto iter = leaf_brick_index_.find(id);
+        if(iter == leaf_brick_index_.end()) {
+            iter = leaf_brick_index_.insert(std::make_pair(id, static_cast<i32>(leaf_brick_index_.size()))).first;
             brick_pool_[iter->second].init();
         }
         return brick_pool_[iter->second];
@@ -145,6 +157,7 @@ template<typename TPool>
 struct Svo {
     TPool & pool_;
     Obb obb_;
+    i32 root_ = -1;
 
     Svo(TPool & pool, Obb const& obb) : pool_{pool}, obb_{obb} {}
 
@@ -207,35 +220,61 @@ struct Svo {
         auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(Vec3i{voxel_coord});
 
         // allocate brick, set value
-        auto& brick = pool_.get_brick(brick_id);
+        auto& brick = pool_.get_leaf_brick(brick_id);
         brick.set_voxel_color(brick_coord, color);
+    }
+
+    void reset_node(i32 address) {
+        OctreeNode &node = pool_.get_node(address);
+        node.max_subdivision = 1;
+        node.data_type_flag = 1;
+        node.address = 0;
+        node.r = 0;
+        node.g = 0;
+        node.b = 0;
+        node.a = 0;
     }
 
     void build_tree() {
         std::array<Vec4i, 16> stack;
-        for(const auto & key_value : pool_.brick_index_) {
+
+        // create tree structure
+        for(const auto & key_value : pool_.leaf_brick_index_) {
             i32 depth = pool_.max_depth_;
             Vec3i brick = key_value.first;
             i32 address = key_value.second;
             while(depth >= 0) {
                 Vec4i brick_id_level{brick, depth};
-                stack[depth] = brick_id_level;
+                stack.at(depth) = brick_id_level;
                 brick /= 2;
+                depth--;
             }
-            for (; depth <= pool_.max_depth_; depth++)
-            {
-                // allocate node if not present
-                OctreeNode node;
-                node.max_subdivision = 0;
-                node.data_type_flag = 0;
-                node.address = ?; // offset of the first child, all 8 children are allocted simultanously and packed together
 
-                // this is address in the big 3d pool
-                node.x = ?;
-                node.y = ?;
-                node.z = ?;
+            if(root_ == -1) {
+                root_ = pool_.alloc_nodes(1);
+                reset_node(root_);
+            }
+
+            OctreeNode & node = pool_.get_node(root_);
+            for (depth = 1; depth <= pool_.max_depth_; depth++)
+            {
+                if(node.max_subdivision) {
+                    node.max_subdivision = 0;
+                    node.address = pool_.alloc_nodes(8);
+
+                    for(i32 i=0; i<8; i++) {
+                        reset_node(node.address + i);
+                    }
+                }
+
+                i32 child_offset = (stack[depth].x % 2) + (stack[depth].y % 2) * 2 + (stack[depth].z % 2) * 4;
+                node = pool_.get_node(node.address + child_offset);
             }
         }
+
+        // per level
+            // copy bricks to neighbours
+            // downsample
     }
 };
 
