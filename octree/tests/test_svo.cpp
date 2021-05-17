@@ -51,35 +51,43 @@ TEMPLATE_TEST_CASE( "Can fill brick texels and do a bilinear sample", "[svo][tem
     }
 }
 
-TEMPLATE_TEST_CASE( "Can build SVO from pre-authored voxels", "[svo][template]",
-//(SvoPool<8, BrickVoxelPosition::NodeCenter>),
-(SvoPool<8, BrickVoxelPosition::NodeCorner>)
-) {
-    TestType pool;
+TEST_CASE( "Can transfer to neighbours for node-corner voxel position", "[svo]") {
+    SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(10000, 10000);
 
     Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
-    Svo svo{pool, volume, 3};
+    Svo svo{pool, volume, 1};
 
     const f32 voxel_size = svo.get_voxel_size();
 
-    Vec3 pos{-0.5f, -0.5f, 0.f };
-    // generate a plane
-    for(; pos.y < 0.5f; pos.y += voxel_size) {
-        for(; pos.x < 0.5f; pos.x += voxel_size) {
-            svo.set_color_at_location(pos, Vec4{0, 1, 0, 1});
-            pos.x += voxel_size;
+    // for node corner size 4 at level 1:
+    // 6 samples from -1 to 1
+    REQUIRE(voxel_size == Approx(2.f / 5.f));
+    for(i32 i=0; i<6; i++) {
+        for(i32 j=0; j<6; j++) {
+            svo.set_color_at_location(Vec3{-1 + i * voxel_size, -1 + j * voxel_size, -0.5f * voxel_size}, Vec4{1, 0, 0, 1});
         }
-        pos.x = -0.5f;
-        pos.y += voxel_size;
     }
     
-    svo.build_tree();
+    //svo.read_color_at_location()
+
+    // Vec3 pos{-0.5f, -0.5f, 0.f };
+    // // generate a plane
+    // for(; pos.y < 0.5f; pos.y += voxel_size) {
+    //     for(; pos.x < 0.5f; pos.x += voxel_size) {
+    //         svo.set_color_at_location(pos, Vec4{0, 1, 0, 1});
+    //         pos.x += voxel_size;
+    //     }
+    //     pos.x = -0.5f;
+    //     pos.y += voxel_size;
+    // }
     
-    // test raycast
-    // one hit (0,0,-1) (0,0,1) -> color = 0,1,0,1
-    // one miss (0,0,-1) (1,0,0)
-    REQUIRE(1 == 1);
+    // svo.build_tree();
+    
+    // // test raycast
+    // // one hit (0,0,-1) (0,0,1) -> color = 0,1,0,1
+    // // one miss (0,0,-1) (1,0,0)
+    // REQUIRE(1 == 1);
 }
 
 // test
