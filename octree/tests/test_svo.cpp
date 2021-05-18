@@ -79,7 +79,14 @@ TEST_CASE( "Can find child index", "[svo]" ) {
     }
 }
 
-TEST_CASE( "Can transfer to neighbours for node-corner voxel position", "[svo]") {
+void require_approx_eq(Vec4 const& a, Vec4 const& b) {
+    REQUIRE(a.x == Approx(b.x));
+    REQUIRE(a.y == Approx(b.y));
+    REQUIRE(a.z == Approx(b.z));
+    REQUIRE(a.w == Approx(b.w));
+}
+
+TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]") {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(10000, 10000);
 
@@ -97,31 +104,19 @@ TEST_CASE( "Can transfer to neighbours for node-corner voxel position", "[svo]")
         }
     }
     
-    Vec4 sample = svo.sample_color_at_location({0, 0, -0.5f * voxel_size});
-    REQUIRE(sample.x == Approx(1.f));
-    REQUIRE(sample.y == Approx(0.f));
-    REQUIRE(sample.z == Approx(0.f));
-    REQUIRE(sample.w == Approx(1.f));
+    // test at sample pos
+    {
+        Vec4 sample = svo.sample_color_at_location({-1, -1, -0.5f * voxel_size});
+        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    }
+    // test between sample pos within a brick
 
-    //svo.read_color_at_location()
+    // test on the border (needs transfer to neighbour for correct sample value)
 
-    // Vec3 pos{-0.5f, -0.5f, 0.f };
-    // // generate a plane
-    // for(; pos.y < 0.5f; pos.y += voxel_size) {
-    //     for(; pos.x < 0.5f; pos.x += voxel_size) {
-    //         svo.set_color_at_location(pos, Vec4{0, 1, 0, 1});
-    //         pos.x += voxel_size;
-    //     }
-    //     pos.x = -0.5f;
-    //     pos.y += voxel_size;
-    // }
-    
-    // svo.build_tree();
-    
-    // // test raycast
-    // // one hit (0,0,-1) (0,0,1) -> color = 0,1,0,1
-    // // one miss (0,0,-1) (1,0,0)
-    // REQUIRE(1 == 1);
+    // svo build tree
+}
+
+TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]") {
 }
 
 // test
