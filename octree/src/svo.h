@@ -13,6 +13,9 @@ enum class BrickLayout {
 };
 
 struct OctreeNode {
+    static constexpr u32 DATA_CONSTANT_COLOR = 0;
+    static constexpr u32 DATA_BRICK_ADDRESS = 1;
+
     u32 max_subdivision : 1; //
     u32 data_type_flag : 1; // node/constant
     u32 address : 30;
@@ -25,10 +28,11 @@ struct OctreeNode {
             u32 a : 8;
         };
         struct {
-            u32 x : 10;
-            u32 y : 10;
-            u32 z : 10;
-            u32 _ : 2;
+            // u32 x : 10;
+            // u32 y : 10;
+            // u32 z : 10;
+            // u32 _ : 2;
+            u32 brick_address;
         };
     };
 };
@@ -157,9 +161,9 @@ struct SvoPool {
 template<typename TPool>
 struct Svo {
     TPool & pool_;
-    Obb obb_;
-    i32 root_ = -1;
-    i32 max_depth_;
+    const Obb obb_;
+    const i32 root_node_;
+    const i32 max_depth_;
 
     static constexpr i32 MAX_DEPTH = 10;
 
@@ -171,14 +175,21 @@ struct Svo {
     };
     std::array<std::vector<BrickInfo>, MAX_DEPTH> bricks_at_depth_; 
 
-    Svo(TPool & pool, Obb const& obb, i32 max_depth) : pool_{pool}, obb_{obb}, max_depth_{max_depth} {}
-
-    i32 get_bricks_num_per_side() const {
-        return 1 << max_depth_;
+    Svo(TPool & pool, Obb const& obb, i32 max_depth) : 
+        pool_{pool}, 
+        obb_{obb}, 
+        max_depth_{max_depth},
+        root_node_{pool.alloc_nodes(1)}
+    {
+        reset_node(root_node_);
     }
 
-    i32 get_voxel_res() const {
-        const i32 brick_res = get_bricks_num_per_side();
+    i32 get_bricks_num_per_side(const i32 depth) const {
+        return 1 << depth;
+    }
+
+    i32 get_voxel_res(const i32 depth) const {
+        const i32 brick_res = get_bricks_num_per_side(depth);
         // voxels on the "border" are not included
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             return brick_res * (TPool::BRICK_SIZE - 2);
@@ -190,7 +201,7 @@ struct Svo {
 
     f32 get_voxel_size() const {
         f32 span = obb_.get_size().x;
-        i32 res = get_voxel_res();
+        i32 res = get_voxel_res(max_depth_);
         // border voxels are outside of the represented volume
         // obb space spans from the first non-border voxel center (0) to the last non-border voxel center (1)
         return span / (res - 1);
@@ -201,8 +212,8 @@ struct Svo {
         return obb_.to_local(world_position) / obb_.half_extent * 0.5f + 0.5f;
     }
 
-    std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord) const {
-        voxel_coord = glm::min(voxel_coord, get_voxel_res() - 1);
+    std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord, const i32 depth) const {
+        voxel_coord = glm::min(voxel_coord, get_voxel_res(depth) - 1);
         // *-|-*--*-|-*
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 2);
@@ -222,41 +233,69 @@ struct Svo {
         assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
 
         // calculate voxel coord
-        const f32 sample_distance = 1.f / get_voxel_res();
+        const f32 sample_distance = 1.f / get_voxel_res(max_depth_);
         const Vec3 voxel_coord = local_voxel_position / sample_distance;
-        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(Vec3i{voxel_coord});
 
-        // allocate brick, set value
-        
-        auto& brick = get_or_insert_brick({brick_id, max_depth_});
-        brick.set_voxel_color(brick_coord, color);
+        commit_voxel_brick_mem(voxel_coord, max_depth_);
+        store_voxel_level(voxel_coord, max_depth_, color);
     }
 
     Vec4 sample_color_at_location(Vec3 location) {
+        Vec3 local_voxel_position = get_local_normalised_position(location);
 
+        assert(glm::all(glm::greaterThanEqual(local_voxel_position, Vec3{})));
+        assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
+
+        // calculate voxel coord
+        const f32 sample_distance = 1.f / get_voxel_res(max_depth_);
+        const Vec3 voxel_coord = local_voxel_position / sample_distance;
+
+        auto [brick_id, _] = get_brick_id_and_brick_coord(voxel_coord, max_depth_);
+        // TODO: depends on brick mode, we need the coord of the leftermost voxel sample?
+        const Vec3 brick_texcoord = voxel_coord - Vec3{brick_id * (TPool::BRICK_SIZE - 1)};
+
+        // walk down the tree
+        i32 current_depth = 0;
+        OctreeNode * current_node = &pool_.get_node(root_node_);
+        //
+        Vec3i node_bricks_begin{};
+        Vec3i node_bricks_end{get_bricks_num_per_side(max_depth_)};
+
+        while(current_depth != max_depth_) {
+            i32 address = current_node->address;
+            assert(address);
+
+            i32 child_index = get_child_index_and_refine_range(brick_id, node_bricks_begin, node_bricks_end);
+            current_node = &pool_.get_node(address + child_index);
+            current_depth++;
+        }
+
+        return pool_.get_brick(current_node->brick_address).sample_trilinear(brick_texcoord); 
     }
 
     void reset_node(i32 address) {
         OctreeNode &node = pool_.get_node(address);
-        node.max_subdivision = 1;
-        node.data_type_flag = 1;
+        node.max_subdivision = 0;
+        //node.data_type_flag = OctreeNode::DATA_CONSTANT_COLOR;
+        //node.data_type_flag = OctreeNode::DATA_BRICK_ADDRESS;
         node.address = 0;
-        node.r = 0;
-        node.g = 0;
-        node.b = 0;
-        node.a = 0;
+        // node.r = 0;
+        // node.g = 0;
+        // node.b = 0;
+        // node.a = 0;
+        node.brick_address = pool_.alloc_brick();
     }
 
-    TPool::BrickType & get_or_insert_brick(Vec4i id_depth) {
-        // todo: don't create bricks outside of borders
-        auto iter = brick_to_address_.find(id_depth);
-        if(iter == brick_to_address_.end()) {
-            iter = brick_to_address_.insert(std::make_pair(id_depth, pool_.alloc_brick())).first;
-            bricks_at_depth_[id_depth.w].push_back({Vec3i{id_depth}, iter->second});
-            pool_.get_brick(iter->second).init();
-        }
-        return pool_.get_brick(iter->second);
-    }
+    // TPool::BrickType & get_or_insert_brick(Vec4i id_depth) {
+    //     // todo: don't create bricks outside of borders
+    //     auto iter = brick_to_address_.find(id_depth);
+    //     if(iter == brick_to_address_.end()) {
+    //         iter = brick_to_address_.insert(std::make_pair(id_depth, pool_.alloc_brick())).first;
+    //         bricks_at_depth_[id_depth.w].push_back({Vec3i{id_depth}, iter->second});
+    //         pool_.get_brick(iter->second).init();
+    //     }
+    //     return pool_.get_brick(iter->second);
+    // }
 
     // struct CopySpan
     // {
@@ -299,12 +338,87 @@ struct Svo {
     //     }
     // }
 
-    Vec4 load_voxel_level(Vec3i, i32) {
-        return {};
+    i32 get_child_index_and_refine_range(const Vec3i brick_id, Vec3i & begin, Vec3i & end) {
+        assert(all(glm::greaterThanEqual(brick_id, begin)));
+        assert(all(glm::lessThan(brick_id, end)));
+
+        Vec3i span = (end - begin) / 2;
+        Vec3i mid = span + begin;
+
+        auto v_greater_eq = glm::greaterThanEqual(brick_id, mid);
+        begin += Vec3i{v_greater_eq} * span;
+        end -= Vec3i{glm::not_(v_greater_eq)} * span;
+        
+        return v_greater_eq.x * 1 + v_greater_eq.y * 2 + v_greater_eq.z * 4;
     }
 
-    void store_voxel_level(Vec3i, i32, Vec4) {
+    void commit_voxel_brick_mem(const Vec3i voxel, const i32 depth) {
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel, depth);
 
+        // walk down the tree
+        i32 current_depth = 0;
+        OctreeNode * current_node = &pool_.get_node(root_node_);
+        //
+        Vec3i node_bricks_begin{};
+        Vec3i node_bricks_end{get_bricks_num_per_side(depth)};
+
+        while(current_depth != depth) {
+            i32 address = 0;
+            if(current_node->address == 0) {
+                current_node->address = address = pool_.alloc_nodes(8);
+                for(i32 i=0; i<8; i++) {
+                    reset_node(address + i);
+                }
+            }
+
+            i32 child_index = get_child_index_and_refine_range(brick_id, node_bricks_begin, node_bricks_end);
+            current_node = &pool_.get_node(address + child_index);
+            current_depth++;
+        }
+    }
+
+    Vec4 load_voxel_level(const Vec3i voxel, const i32 depth) {
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel, depth);
+
+        // walk down the tree
+        i32 current_depth = 0;
+        OctreeNode * current_node = &pool_.get_node(root_node_);
+        //
+        Vec3i node_bricks_begin{};
+        Vec3i node_bricks_end{get_bricks_num_per_side(depth)};
+
+        while(current_depth != depth) {
+            i32 address = current_node->address;
+            assert(address);
+
+            i32 child_index = get_child_index_and_refine_range(brick_id, node_bricks_begin, node_bricks_end);
+            current_node = &pool_.get_node(address + child_index);
+            current_depth++;
+        }
+
+        pool_.get_brick(current_node->brick_address).fetch(brick_coord);
+    }
+
+    void store_voxel_level(const Vec3i voxel, const i32 depth, const Vec4 color) {
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel, depth);
+
+        // walk down the tree
+        i32 current_depth = 0;
+        OctreeNode * current_node = &pool_.get_node(root_node_);
+        //
+        Vec3i node_bricks_begin{};
+        Vec3i node_bricks_end{get_bricks_num_per_side(depth)};
+
+        while(current_depth != depth) {
+            i32 address = current_node->address;
+            assert(address);
+
+            i32 child_index = get_child_index_and_refine_range(brick_id, node_bricks_begin, node_bricks_end);
+            current_node = &pool_.get_node(address + child_index);
+            current_depth++;
+        }
+
+        pool_.get_brick(current_node->brick_address).set_voxel_color(brick_coord, color);
     }
 
     // void build_tree() {

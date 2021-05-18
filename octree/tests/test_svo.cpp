@@ -51,6 +51,34 @@ TEMPLATE_TEST_CASE( "Can fill brick texels and do a bilinear sample", "[svo][tem
     }
 }
 
+TEST_CASE( "Can find child index", "[svo]" ) {
+    SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
+    pool.reset(1, 1);
+    Obb volume{.center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1}};
+    Svo svo{pool, volume, 1};
+    {
+        Vec3i begin{0};
+        Vec3i end{4};
+        REQUIRE(svo.get_child_index_and_refine_range({}, begin, end) == 0);
+        REQUIRE(begin == Vec3i{0});
+        REQUIRE(end == Vec3i{2, 2, 2});
+    }
+    {
+        Vec3i begin{0};
+        Vec3i end{4};
+        REQUIRE(svo.get_child_index_and_refine_range({0, 1, 2}, begin, end) == 4);
+        REQUIRE(begin == Vec3i{0, 0, 2});
+        REQUIRE(end == Vec3i{2, 2, 4});
+    }
+    {
+        Vec3i begin{4, 4, 8};
+        Vec3i end{8, 8, 12};
+        REQUIRE(svo.get_child_index_and_refine_range({7, 7, 11}, begin, end) == 7);
+        REQUIRE(begin == Vec3i{6, 6, 10});
+        REQUIRE(end == Vec3i{8, 8, 12});
+    }
+}
+
 TEST_CASE( "Can transfer to neighbours for node-corner voxel position", "[svo]") {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(10000, 10000);
@@ -69,6 +97,12 @@ TEST_CASE( "Can transfer to neighbours for node-corner voxel position", "[svo]")
         }
     }
     
+    Vec4 sample = svo.sample_color_at_location({0, 0, -0.5f * voxel_size});
+    REQUIRE(sample.x == Approx(1.f));
+    REQUIRE(sample.y == Approx(0.f));
+    REQUIRE(sample.z == Approx(0.f));
+    REQUIRE(sample.w == Approx(1.f));
+
     //svo.read_color_at_location()
 
     // Vec3 pos{-0.5f, -0.5f, 0.f };
