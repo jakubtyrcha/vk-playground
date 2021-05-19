@@ -126,9 +126,26 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
         require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
     }
 
-    // test on the border (needs transfer to neighbour for correct sample value)
+    // svo build tree & transfer neighbours
+    svo.build_tree();
 
-    // svo build tree
+    // test on the border (needs transfer to neighbour for correct sample value)
+    {
+        Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1, -0.5f * voxel_size});
+        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    }
+    {
+        Vec4 sample = svo.sample_color_at_location({-1, -1 + 2.5f * voxel_size, -0.5f * voxel_size});
+        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    }
+    {
+        Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1 + 2.5f * voxel_size, -0.5f * voxel_size});
+        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    }
+    {
+        Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1 + 2.5f * voxel_size, 0});
+        require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+    }
 }
 
 TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]") {

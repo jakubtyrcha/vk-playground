@@ -427,6 +427,9 @@ struct Svo {
         pool_.get_brick(current_node->brick_address).set_voxel_color(brick_coord, color);
     }
 
+    void build_tree() {
+    }
+
     // void build_tree() {
     //     // create tree structure for the leaf nodes
     //     std::array<Vec3i, MAX_DEPTH> stack;
