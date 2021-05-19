@@ -199,12 +199,17 @@ struct Svo {
         }
     }
 
-    f32 get_voxel_size() const {
+    f32 get_voxel_world_size() const {
         f32 span = obb_.get_size().x;
         i32 res = get_voxel_res(max_depth_);
         // border voxels are outside of the represented volume
         // obb space spans from the first non-border voxel center (0) to the last non-border voxel center (1)
         return span / (res - 1);
+    }
+
+    f32 get_voxel_normalised_size(const i32 depth) const {
+        i32 res = get_voxel_res(depth);
+        return 1.f / (res - 1);
     }
 
     // [0, 1] cube
@@ -233,11 +238,12 @@ struct Svo {
         assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
 
         // calculate voxel coord
-        const f32 sample_distance = 1.f / get_voxel_res(max_depth_);
+        const f32 sample_distance = get_voxel_normalised_size(max_depth_);
         const Vec3 voxel_coord = local_voxel_position / sample_distance;
 
-        commit_voxel_brick_mem(voxel_coord, max_depth_);
-        store_voxel_level(voxel_coord, max_depth_, color);
+        // todo: symmetry with sampling
+        commit_voxel_brick_mem(voxel_coord + 0.5f, max_depth_);
+        store_voxel_level(voxel_coord + 0.5f, max_depth_, color);
     }
 
     Vec4 sample_color_at_location(Vec3 location) {
@@ -247,7 +253,7 @@ struct Svo {
         assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
 
         // calculate voxel coord
-        const f32 sample_distance = 1.f / get_voxel_res(max_depth_);
+        const f32 sample_distance = get_voxel_normalised_size(max_depth_);
         const Vec3 voxel_coord = local_voxel_position / sample_distance;
 
         auto [brick_id, _] = get_brick_id_and_brick_coord(voxel_coord, max_depth_);

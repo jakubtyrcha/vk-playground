@@ -91,15 +91,18 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
     pool.reset(10000, 10000);
 
     Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
-    Svo svo{pool, volume, 1};
+    i32 max_depth = 1;
+    Svo svo{pool, volume, max_depth};
 
-    const f32 voxel_size = svo.get_voxel_size();
+    const f32 voxel_size = svo.get_voxel_world_size();
 
     // for node corner size 4 at level 1:
     // 6 samples from -1 to 1
     REQUIRE(voxel_size == Approx(2.f / 5.f));
-    for(i32 i=0; i<6; i++) {
-        for(i32 j=0; j<6; j++) {
+    const i32 res = svo.get_voxel_res(max_depth);
+    REQUIRE(res == 6);
+    for(i32 i=0; i<res; i++) {
+        for(i32 j=0; j<res; j++) {
             svo.set_color_at_location(Vec3{-1 + i * voxel_size, -1 + j * voxel_size, -0.5f * voxel_size}, Vec4{1, 0, 0, 1});
         }
     }
@@ -110,6 +113,18 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
         require_approx_eq(sample, Vec4{1, 0, 0, 1});
     }
     // test between sample pos within a brick
+    {
+        Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1, -0.5f * voxel_size});
+        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    }
+    {
+        Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, -0.5f * voxel_size});
+        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    }
+    {
+        Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, 0});
+        require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+    }
 
     // test on the border (needs transfer to neighbour for correct sample value)
 
