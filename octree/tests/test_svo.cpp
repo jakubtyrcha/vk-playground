@@ -126,8 +126,7 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
         require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
     }
 
-    // svo build tree & transfer neighbours
-    svo.build_tree();
+    svo.transfer_border_voxels();
 
     // test on the border (needs transfer to neighbour for correct sample value)
     {

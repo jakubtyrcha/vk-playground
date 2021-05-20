@@ -257,27 +257,13 @@ struct Svo {
         const f32 sample_distance = get_voxel_normalised_size(max_depth_);
         const Vec3 voxel_coord = local_voxel_position / sample_distance;
 
-        auto [brick_id, _] = get_brick_id_and_brick_coord(voxel_coord, max_depth_);
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel_coord, max_depth_);
+        i32 brick_address = request_committed_brick_mem(brick_id, max_depth_);
+
         // TODO: depends on brick mode, we need the coord of the leftermost voxel sample?
         const Vec3 brick_texcoord = voxel_coord - Vec3{brick_id * (TPool::BRICK_SIZE - 1)};
 
-        // walk down the tree
-        i32 current_depth = 0;
-        OctreeNode * current_node = &pool_.get_node(root_node_);
-        //
-        Vec3i node_bricks_begin{};
-        Vec3i node_bricks_end{get_bricks_num_per_side(max_depth_)};
-
-        while(current_depth != max_depth_) {
-            i32 address = current_node->address;
-            assert(address);
-
-            i32 child_index = get_child_index_and_refine_range(brick_id, node_bricks_begin, node_bricks_end);
-            current_node = &pool_.get_node(address + child_index);
-            current_depth++;
-        }
-
-        return pool_.get_brick(current_node->brick_address).sample_trilinear(brick_texcoord); 
+        return pool_.get_brick(brick_address).sample_trilinear(brick_texcoord);
     }
 
     void reset_node(i32 address) {
@@ -304,46 +290,50 @@ struct Svo {
     //     return pool_.get_brick(iter->second);
     // }
 
-    // struct CopySpan
-    // {
-    //     Vec3i begin;
-    //     Vec3i end;
-    //     Vec3i brick_neighbour_offset;
-    // };
+    struct BorderCopySpan
+    {
+        Vec3i voxels_begin;
+        Vec3i voxels_end;
+        Vec3i neighbour_offset;
+    };
 
-    // void copy_border(Vec4i current_brick, i32 current_address, CopySpan const & span) 
-    // {
-    //     auto const & src_brick = pool_.get_brick(current_address);
-    //     bool needs_copy = false;
-    //     for(i32 z=span.begin.z; z<span.end.z; z++) {
-    //         for(i32 y=span.begin.y; y<span.end.y; y++) {
-    //             for(i32 x=span.begin.x; x<span.end.x; x++) {
-    //                 if(src_brick.fetch({x, y, z}) != Vec4{}) {
-    //                     needs_copy = true;
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //     }
+    void copy_border(Vec3i brick_id, i32 depth, BorderCopySpan const & span) 
+    {
+        auto const & src_brick = pool_.get_brick(request_committed_brick_mem(brick_id, depth));
+        bool needs_copy = false;
+        for(i32 z=span.voxels_begin.z; z<span.voxels_end.z; z++) {
+            for(i32 y=span.voxels_begin.y; y<span.voxels_end.y; y++) {
+                for(i32 x=span.voxels_begin.x; x<span.voxels_end.x; x++) {
+                    if(src_brick.fetch({x, y, z}) != Vec4{}) {
+                        needs_copy = true;
+                        break;
+                    }
+                }
+            }
+        }
 
-    //     if(!needs_copy) {
-    //         return;
-    //     }
+        if (!needs_copy)
+        {
+            return;
+        }
 
-    //     Vec3i neighbour = Vec3i{current_brick} + span.brick_neighbour_offset;
+        Vec3i neighbour_id = brick_id + span.neighbour_offset;
 
-    //     // todo: this can fail if outside borders!
-    //     // also if we created: update parent!
-    //     auto & dst_brick = get_or_insert_brick({neighbour, current_brick.w});
-    //     for(i32 z=span.begin.z; z<span.end.z; z++) {
-    //         for(i32 y=span.begin.y; y<span.end.y; y++) {
-    //             for(i32 x=span.begin.x; x<span.end.x; x++) {
-    //                 Vec3i dst_texel = (Vec3i{x, y, z} + span.brick_neighbour_offset) % TPool::BRICK_SIZE;
-    //                 dst_brick.set_voxel_color(dst_texel, src_brick.fetch({x, y, z}));
-    //             }
-    //         }
-    //     }
-    // }
+        if (glm::any(glm::lessThan(neighbour_id, Vec3i{})))
+        {
+            return;
+        }
+
+        auto & dst_brick = pool_.get_brick(request_committed_brick_mem(neighbour_id, depth));
+        for(i32 z=span.voxels_begin.z; z<span.voxels_end.z; z++) {
+            for(i32 y=span.voxels_begin.y; y<span.voxels_end.y; y++) {
+                for(i32 x=span.voxels_begin.x; x<span.voxels_end.x; x++) {
+                    Vec3i dst_texel = (Vec3i{x, y, z} + span.neighbour_offset + TPool::BRICK_SIZE) % TPool::BRICK_SIZE;
+                    dst_brick.set_voxel_color(dst_texel, src_brick.fetch({x, y, z}));
+                }
+            }
+        }
+    }
 
     static Vec3i child_index_to_spatial_offset(const i32 index) {
         return { index % 2, (index / 2) % 2, index / 4 };
@@ -372,8 +362,8 @@ struct Svo {
         Vec3i node_bricks_end{get_bricks_num_per_side(depth)};
 
         while(current_depth != depth) {
-            i32 address = 0;
-            if(current_node->address == 0) {
+            i32 address = current_node->address;
+            if(address == 0) {
                 current_node->address = address = pool_.alloc_nodes(8);
                 for(i32 i=0; i<8; i++) {
                     reset_node(address + i);
@@ -428,12 +418,24 @@ struct Svo {
 
     // todo: this doesn't build the tree any more
     // transfer_border_voxels
-    void build_tree() {
+    void transfer_border_voxels() {
         for (i32 depth = max_depth_; depth >= 0; depth--)
         {
             std::vector<Vec3i> bricks;
             gather_bricks_at_level(&pool_.get_node(root_node_), {}, 0, depth, bricks);
 
+            for (Vec3i brick_id : bricks)
+            {
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 0, 0}});
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {TPool::BRICK_SIZE - 1, 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, -1, 0}});
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 1}, .neighbour_offset = {0, 0, -1}});
+                //
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, -1, 0}});
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, TPool::BRICK_SIZE - 1, 1}, .neighbour_offset = {-1, 0, -1}});
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {TPool::BRICK_SIZE - 1, 1, 1}, .neighbour_offset = {0, -1, -1}});
+                //
+                copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, 1, 1}, .neighbour_offset = {-1, -1, -1}});
+            }
 
             // walk the tree to build the vector of bricks at max_depth
             // foreach brick
