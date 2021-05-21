@@ -213,7 +213,12 @@ struct Svo {
 
     f32 get_voxel_normalised_size(const i32 depth) const {
         i32 res = get_voxel_res(depth);
-        return 1.f / (res - 1);
+        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            return 1.f / res;
+        }
+        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            return 1.f / (res - 1);
+        }
     }
 
     // [0, 1] cube
@@ -241,16 +246,25 @@ struct Svo {
         }
     }
 
-    void set_color_at_location(Vec3 location, Vec4 color) {
-        Vec3 local_voxel_position = get_local_normalised_position(location);
+    static constexpr Vec3 get_normalised_position_to_sample_offset() {
+        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            return Vec3{-0.5f};
+        }
+        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            return {};
+        }
+    }
 
-        assert(glm::all(glm::greaterThanEqual(local_voxel_position, Vec3{})));
-        assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
+    void set_color_at_location(Vec3 location, Vec4 color) {
+        Vec3 local_normalised_position = get_local_normalised_position(location);
+
+        assert(glm::all(glm::greaterThanEqual(local_normalised_position, Vec3{})));
+        assert(glm::all(glm::lessThanEqual(local_normalised_position, Vec3{1.f})));
 
         // calculate voxel coord
         const f32 sample_distance = get_voxel_normalised_size(max_depth_);
-        const Vec3 voxel_coord = local_voxel_position / sample_distance;
-        const Vec3i voxel_icoord = voxel_coord + 0.5f;
+        const Vec3 voxel_coord = local_normalised_position / sample_distance + get_normalised_position_to_sample_offset();
+        const Vec3i voxel_icoord = voxel_coord + 0.5f; // rounding
 
         // we need to round the proximity of the sample to that sample index
         // it's not necessary when sampling later (as we have the border anyway)
@@ -258,20 +272,27 @@ struct Svo {
     }
 
     Vec4 sample_color_at_location_level(Vec3 location, i32 depth) {
-        Vec3 local_voxel_position = get_local_normalised_position(location);
+        Vec3 local_normalised_position = get_local_normalised_position(location);
 
-        assert(glm::all(glm::greaterThanEqual(local_voxel_position, Vec3{})));
-        assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
+        assert(glm::all(glm::greaterThanEqual(local_normalised_position, Vec3{})));
+        assert(glm::all(glm::lessThanEqual(local_normalised_position, Vec3{1.f})));
 
         // calculate voxel coord
         const f32 sample_distance = get_voxel_normalised_size(depth);
-        const Vec3 voxel_coord = local_voxel_position / sample_distance;
+        const Vec3 voxel_coord = local_normalised_position / sample_distance + get_normalised_position_to_sample_offset();
+        const Vec3i voxel_icoord = voxel_coord;
 
-        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel_coord, depth);
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel_icoord, depth);
         i32 brick_address = request_committed_brick_mem(brick_id, depth);
 
         // TODO: depends on brick mode, we need the coord of the leftermost voxel sample?
-        const Vec3 brick_texcoord = voxel_coord - Vec3{brick_id * (TPool::BRICK_SIZE - 1)};
+        Vec3 brick_texcoord;
+        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            brick_texcoord = voxel_coord - Vec3{brick_id * (TPool::BRICK_SIZE - 2)} + 1.f;
+        }
+        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            brick_texcoord = voxel_coord - Vec3{brick_id * (TPool::BRICK_SIZE - 1)};
+        }
 
         return pool_.get_brick(brick_address).sample_trilinear(brick_texcoord);
     }
@@ -292,17 +313,6 @@ struct Svo {
         // node.a = 0;
         node.brick_address = pool_.alloc_brick();
     }
-
-    // TPool::BrickType & get_or_insert_brick(Vec4i id_depth) {
-    //     // todo: don't create bricks outside of borders
-    //     auto iter = brick_to_address_.find(id_depth);
-    //     if(iter == brick_to_address_.end()) {
-    //         iter = brick_to_address_.insert(std::make_pair(id_depth, pool_.alloc_brick())).first;
-    //         bricks_at_depth_[id_depth.w].push_back({Vec3i{id_depth}, iter->second});
-    //         pool_.get_brick(iter->second).init();
-    //     }
-    //     return pool_.get_brick(iter->second);
-    // }
 
     struct BorderCopySpan
     {
@@ -539,70 +549,3 @@ struct Svo {
         }
     }
 };
-
-// void generate_plane(SvoPool & pool, Plane plane, Obb cube, i32 max_octree_depth, Vec4 color) {
-//     std::unordered_map<Vec3i, BrickPayload> bricks;
-
-//     const Plane local_plane = cube.transform_to_local(plane);
-//     const f32 cube_side_len = cube.get_size().x;
-//     const i32 bricks_num_max_depth = (1 << max_octree_depth);
-
-//     f32 voxel_size;
-//     i32 voxel_res;
-//     if( SparseOctreeBrickConfig::brick_voxel_position == SparseOctreeBrickConfig::BrickVoxelNodeCenter ) {
-//         voxel_res = bricks_num_max_depth * (SparseOctreeBrickConfig::brick_size - 2);
-//         // *-|-*--*-|-*
-//         voxel_size = cube_side_len / voxel_res;
-//     }
-//     else if( SparseOctreeBrickConfig::brick_voxel_position == SparseOctreeBrickConfig::BrickVoxelNodeCorner ) {
-//         voxel_res = bricks_num_max_depth * (SparseOctreeBrickConfig::brick_size - 1) + 1;
-//         // |*--*--*|
-//         voxel_size = cube_side_len / (voxel_res - 1);
-//     }
-    
-//     Ray ray_setup{ .origin = {}, .direction = {1, 0, 0} };
-//     Vec3 ray_offset_dim0{0, 1, 0};
-//     Vec3 ray_offset_dim1{0, 0, 1};
-
-//     if(glm::dot(ray_setup.direction, local_plane.normal) == 0) {
-//         ray_setup.direction = {0, 1, 0};
-//         ray_offset_dim0 = {1, 0, 0};
-//     }
-
-//     if(SparseOctreeBrickConfig::brick_voxel_position == SparseOctreeBrickConfig::BrickVoxelNodeCenter) {
-//         ray_setup.origin += (ray_offset_dim0 + ray_offset_dim1) * voxel_size * 0.5f;
-//     }
-
-//     for(i32 y=0; y<voxel_res; y++) {
-//         for(i32 x=0; x<voxel_res; x++) {
-//             Ray ray {.origin = ray_setup.origin + ray_offset_dim0 * (f32)x + ray_offset_dim1 * (f32)y, .direction = ray_setup.direction}; 
-//             f32 t = -1.f;
-//             if(glm::intersectRayPlane(ray.origin, ray.direction, local_plane.origin, local_plane.normal, t)) {
-//                 Vec3 hit = ray.origin + ray.direction * t;
-//                 Vec3i voxel_coord = (hit - ray_setup.origin) / voxel_size;
-//                 Vec3i brick_id;
-//                 Vec3i in_brick_coord;
-//                 if constexpr(SparseOctreeBrickConfig::brick_voxel_position == SparseOctreeBrickConfig::BrickVoxelNodeCenter) {
-//                     brick_id = voxel_coord / (SparseOctreeBrickConfig::brick_size - 2);
-//                     in_brick_coord = voxel_coord - brick_id * (SparseOctreeBrickConfig::brick_size - 2);
-//                 }
-//                 else if constexpr(SparseOctreeBrickConfig::brick_voxel_position == SparseOctreeBrickConfig::BrickVoxelNodeCorner) {
-//                     brick_id = voxel_coord / (SparseOctreeBrickConfig::brick_size - 1);
-//                     in_brick_coord = voxel_coord - brick_id * (SparseOctreeBrickConfig::brick_size - 1);
-//                 }
-
-//                 auto brick_iter = bricks.find(brick_id);
-//                 if(brick_iter == bricks.end()) {
-//                     brick_iter = bricks.insert({brick_id, BrickPayload{}}).first;
-//                     brick_iter->second.init();
-//                 }
-//                 BrickPayload& brick = brick_iter->second;
-//                 brick.set_voxel_color(in_brick_coord, color);
-//             }
-//         }
-//     }
-
-//     // build 
-//     // traverse the bricks bottom-top to build the nodes structure
-// }
-

@@ -104,7 +104,7 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
         }
     }
     
-    SECTION( "sampling at voxel position" ) {
+    SECTION( "sampling at voxel center" ) {
         {
             Vec4 sample = svo.sample_color_at_location({-1, -1, -voxel_size});
             require_approx_eq(sample, Vec4{1, 0, 0, 1});
@@ -158,8 +158,6 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
     }
 }
 
-// todo: random test against a 3d brick, random colros and sampling locations
-
 TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]") {
     SvoPool<4, BrickVoxelPosition::NodeCenter> pool;
     pool.reset(10000, 10000);
@@ -183,17 +181,23 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
         }
     }
 
-    // SECTION( "sampling at voxel position" ) {
-    //     {
-    //         Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, -0.5f * voxel_size});
-    //         require_approx_eq(sample, Vec4{1, 0, 0, 1});
-    //     }
+    SECTION( "sampling at voxel center" ) {
+        {
+            Vec4 sample = svo.sample_color_at_location({
+                -1 + 0.5f * voxel_size, 
+                -1 + 0.5f * voxel_size, 
+                -0.5f * voxel_size
+                });
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
     }
 }
+
+// todo: random test against a 3d brick, random colros and sampling locations
 
 // test
 // different swizzle, brick params (resolution & node centers), depth (0, 1, 5)
 
-// build plane SVO
+// build a plane SVO
 // cast a few rays, hits & misses, ray in an opposite direction
 // color interpolation, volume accumulation
