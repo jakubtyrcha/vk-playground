@@ -203,9 +203,12 @@ struct Svo {
     f32 get_voxel_world_size() const {
         f32 span = obb_.get_size().x;
         i32 res = get_voxel_res(max_depth_);
-        // border voxels are outside of the represented volume
-        // obb space spans from the first non-border voxel center (0) to the last non-border voxel center (1)
-        return span / (res - 1);
+        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            return span / res;
+        }
+        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            return span / (res - 1);
+        }
     }
 
     f32 get_voxel_normalised_size(const i32 depth) const {

@@ -95,9 +95,6 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
     Svo svo{pool, volume, max_depth};
 
     const f32 voxel_size = svo.get_voxel_world_size();
-
-    // for node corner size 4 at level 1:
-    // 6 samples from -1 to 1
     REQUIRE(voxel_size == Approx(2.f / 6.f));
     const i32 res = svo.get_voxel_res(max_depth);
     REQUIRE(res == 7);
@@ -164,6 +161,34 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
 // todo: random test against a 3d brick, random colros and sampling locations
 
 TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]") {
+    SvoPool<4, BrickVoxelPosition::NodeCenter> pool;
+    pool.reset(10000, 10000);
+
+    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    i32 max_depth = 1;
+    Svo svo{pool, volume, max_depth};
+
+    const f32 voxel_size = svo.get_voxel_world_size();
+    REQUIRE(voxel_size == Approx(0.5f));
+    const i32 res = svo.get_voxel_res(max_depth);
+    REQUIRE(res == 4);
+    for(i32 i=0; i<res; i++) {
+        for(i32 j=0; j<res; j++) {
+            svo.set_color_at_location(Vec3{
+                -1 + 0.5f * voxel_size + i * voxel_size, 
+                -1 + 0.5f * voxel_size + j * voxel_size, 
+                -0.5f * voxel_size}, 
+                Vec4{1, 0, 0, 1}
+            );
+        }
+    }
+
+    // SECTION( "sampling at voxel position" ) {
+    //     {
+    //         Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, -0.5f * voxel_size});
+    //         require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    //     }
+    }
 }
 
 // test
