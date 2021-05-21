@@ -181,18 +181,32 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
         }
     }
 
+    Vec3 v000_sample {-1 + 0.5f * voxel_size};
+
     SECTION( "sampling at voxel center" ) {
         {
-            Vec4 sample = svo.sample_color_at_location({
-                -1 + 0.5f * voxel_size, 
-                -1 + 0.5f * voxel_size, 
-                -0.5f * voxel_size
-                });
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0, 0, 1}});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+    }
+
+    SECTION( "interpolating non-border voxels" ) {
+        {
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0.5f, 0, 1}});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0, 0.5f, 1}});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0.5f, 0.5f, 1}});
             require_approx_eq(sample, Vec4{1, 0, 0, 1});
         }
     }
 }
 
+// todo: test a gradient 
 // todo: random test against a 3d brick, random colros and sampling locations
 
 // test
