@@ -1,6 +1,7 @@
 #include "math_helpers.h"
 #include <array>
 #include <tuple>
+#include <optional>
 
 enum class BrickVoxelPosition {
     NodeCenter,
@@ -195,7 +196,7 @@ struct Svo {
             return brick_res * (TPool::BRICK_SIZE - 2);
         }
         else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
-            return brick_res * (TPool::BRICK_SIZE - 1);
+            return brick_res * (TPool::BRICK_SIZE - 1) + 1;
         }
     }
 
@@ -218,7 +219,11 @@ struct Svo {
     }
 
     std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord, const i32 depth) const {
-        voxel_coord = glm::min(voxel_coord, get_voxel_res(depth) - 1);
+        // TODO: assert?
+        assert(glm::all(glm::greaterThanEqual(voxel_coord, {})));
+        assert(glm::all(glm::lessThan(voxel_coord, Vec3i{get_voxel_res(depth)})));
+        //voxel_coord = glm::min(voxel_coord, get_voxel_res(depth) - 1);
+
         // *-|-*--*-|-*
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 2);
@@ -227,6 +232,8 @@ struct Svo {
         // |*--*--*|
         else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 1);
+            // this is to address the last voxel within the last brick
+            brick_id = glm::min(brick_id, get_bricks_num_per_side(depth) - 1);
             return std::make_tuple(brick_id, voxel_coord - brick_id * (TPool::BRICK_SIZE - 1));
         }
     }
@@ -247,23 +254,27 @@ struct Svo {
         store_voxel_level(voxel_icoord, max_depth_, color);
     }
 
-    Vec4 sample_color_at_location(Vec3 location) {
+    Vec4 sample_color_at_location_level(Vec3 location, i32 depth) {
         Vec3 local_voxel_position = get_local_normalised_position(location);
 
         assert(glm::all(glm::greaterThanEqual(local_voxel_position, Vec3{})));
         assert(glm::all(glm::lessThanEqual(local_voxel_position, Vec3{1.f})));
 
         // calculate voxel coord
-        const f32 sample_distance = get_voxel_normalised_size(max_depth_);
+        const f32 sample_distance = get_voxel_normalised_size(depth);
         const Vec3 voxel_coord = local_voxel_position / sample_distance;
 
-        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel_coord, max_depth_);
-        i32 brick_address = request_committed_brick_mem(brick_id, max_depth_);
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel_coord, depth);
+        i32 brick_address = request_committed_brick_mem(brick_id, depth);
 
         // TODO: depends on brick mode, we need the coord of the leftermost voxel sample?
         const Vec3 brick_texcoord = voxel_coord - Vec3{brick_id * (TPool::BRICK_SIZE - 1)};
 
         return pool_.get_brick(brick_address).sample_trilinear(brick_texcoord);
+    }
+
+    Vec4 sample_color_at_location(Vec3 location) {
+        return sample_color_at_location_level(location, max_depth_);
     }
 
     void reset_node(i32 address) {
@@ -354,6 +365,9 @@ struct Svo {
     }
 
     i32 request_committed_brick_mem(const Vec3i brick_id, const i32 depth) {
+        assert(glm::all(glm::greaterThanEqual(brick_id, {})));
+        assert(glm::all(glm::lessThan(brick_id, Vec3i{get_voxel_res(depth)})));
+
         // walk down the tree
         i32 current_depth = 0;
         OctreeNode * current_node = &pool_.get_node(root_node_);
@@ -379,10 +393,20 @@ struct Svo {
     }
 
     // skips border voxels
+    std::optional<Vec4> try_load_voxel_level(const Vec3i voxel, const i32 depth) {
+        const bool valid_sample = glm::all(glm::greaterThanEqual(voxel, {})) &&glm::all(glm::lessThan(voxel, Vec3i{get_voxel_res(depth)}));        
+        if(!valid_sample) {
+            return std::nullopt;
+        }
+        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel, depth);
+        i32 brick_address = request_committed_brick_mem(brick_id, depth);
+        return pool_.get_brick(brick_address).fetch(brick_coord);
+    }
+
     Vec4 load_voxel_level(const Vec3i voxel, const i32 depth) {
         auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel, depth);
         i32 brick_address = request_committed_brick_mem(brick_id, depth);
-        pool_.get_brick(brick_address).fetch(brick_coord);
+        return pool_.get_brick(brick_address).fetch(brick_coord);
     }
 
     // skips border voxels
@@ -416,13 +440,86 @@ struct Svo {
         }
     }
 
-    // todo: this doesn't build the tree any more
-    // transfer_border_voxels
-    void transfer_border_voxels() {
+    void build_tree() {
         for (i32 depth = max_depth_; depth >= 0; depth--)
         {
             std::vector<Vec3i> bricks;
             gather_bricks_at_level(&pool_.get_node(root_node_), {}, 0, depth, bricks);
+
+            if(depth != max_depth_)
+            {
+                // downsample
+                for (Vec3i brick_id : bricks)
+                {
+                    if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
+                    {
+                        for (i32 z = 0; z < TPool::BRICK_SIZE; z++)
+                        {
+                            for (i32 y = 0; y < TPool::BRICK_SIZE; y++)
+                            {
+                                for (i32 x = 0; x < TPool::BRICK_SIZE; x++)
+                                {
+                                    Vec3i dst_voxel = brick_id * (TPool::BRICK_SIZE - 1) + Vec3i{x, y, z};
+                                    Vec3i src_voxel = dst_voxel * 2;
+                                    
+                                    Vec4 downsampled{0};
+                                    
+                                    std::array<f32, 3 * 3> kernel_02 {
+                                        1.f, 2.f, 1.f,
+                                        2.f, 4.f, 2.f,
+                                        1.f, 2.f, 1.f
+                                    };
+                                    std::array<f32, 3 * 3> kernel_1 {
+                                        2.f, 4.f, 2.f,
+                                        4.f, 8.f, 4.f,
+                                        2.f, 4.f, 2.f,
+                                    };
+                                    f32 w = 0.f;
+                                    for(i32 i=0; i<3; i++) {
+                                        for (i32 j= 0; j<3; j++)
+                                        {
+                                            auto maybe_sample = try_load_voxel_level(src_voxel + Vec3i{i - 1, j - 1, -1}, depth + 1);
+                                            if(maybe_sample)
+                                            {
+                                                downsampled += (*maybe_sample) * Vec4{kernel_02.at(i * 3 + j)};
+                                                w += kernel_02.at(i * 3 + j);
+                                            }
+                                        }
+                                    }
+                                    for(i32 i=0; i<3; i++) {
+                                        for (i32 j= 0; j<3; j++)
+                                        {
+                                            auto maybe_sample = try_load_voxel_level(src_voxel + Vec3i{i - 1, j - 1, 0}, depth + 1);
+                                            if(maybe_sample)
+                                            {
+                                                downsampled += (*maybe_sample) * Vec4{kernel_1.at(i * 3 + j)};
+                                                w += kernel_1.at(i * 3 + j);
+                                            }
+                                        }
+                                    }
+                                    for(i32 i=0; i<3; i++) {
+                                        for (i32 j= 0; j<3; j++)
+                                        {
+                                            auto maybe_sample = try_load_voxel_level(src_voxel + Vec3i{i - 1, j - 1, 1}, depth + 1);
+                                            if(maybe_sample)
+                                            {
+                                                downsampled += (*maybe_sample) * Vec4{kernel_02.at(i * 3 + j)};
+                                                w += kernel_02.at(i * 3 + j);
+                                            }
+                                        }
+                                    }
+
+                                    // to avoid NaN
+                                    if(w == 0) {
+                                        w = 1.f;
+                                    }
+                                    store_voxel_level(dst_voxel, depth, downsampled / w);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             for (Vec3i brick_id : bricks)
             {
@@ -436,148 +533,8 @@ struct Svo {
                 //
                 copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, 1, 1}, .neighbour_offset = {-1, -1, -1}});
             }
-
-            // walk the tree to build the vector of bricks at max_depth
-            // foreach brick
-            {
-                // iterate edge voxels
-                // find neighbour brick address with request_committed_brick_mem
-            }
         }
     }
-
-    // void build_tree() {
-    //     // create tree structure for the leaf nodes
-    //     std::array<Vec3i, MAX_DEPTH> stack;
-        
-    //     for(BrickInfo brick_info : bricks_at_depth_[max_depth_]) {
-    //         i32 depth = max_depth_;
-    //         Vec3i brick_id = brick_info.id;
-    //         i32 address = brick_info.address;
-    //         while(depth >= 0) {
-    //             stack.at(depth) = brick_id;
-    //             brick_id /= 2;
-    //             depth--;
-    //         }
-
-    //         if(root_ == -1) {
-    //             root_ = pool_.alloc_nodes(1);
-    //             reset_node(root_);
-    //         }
-
-    //         OctreeNode & node = pool_.get_node(root_);
-    //         for (depth = 1; depth <= max_depth_; depth++)
-    //         {
-    //             if(node.max_subdivision) {
-    //                 node.max_subdivision = 0;
-    //                 node.address = pool_.alloc_nodes(8);
-
-    //                 for(i32 i=0; i<8; i++) {
-    //                     reset_node(node.address + i);
-    //                 }
-    //             }
-
-    //             i32 child_offset = (stack[depth].x % 2) + (stack[depth].y % 2) * 2 + (stack[depth].z % 2) * 4;
-    //             node = pool_.get_node(node.address + child_offset);
-    //         }
-    //     }
-
-    //     // iterate leaf bricks
-    //     for (i32 depth = max_depth_; depth >= 0; depth--)
-    //     {
-    //         if(depth < max_depth_) 
-    //         {
-    //             // todo: upsample from children
-    //             for (BrickInfo brick_info : bricks_at_depth_[depth])
-    //             {
-    //                 Vec3i brick_id = brick_info.id;
-    //                 i32 address = brick_info.address;
-
-    //                 if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter)
-    //                 {
-    //                     // todo
-    //                 }
-    //                 else if (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
-    //                 {
-    //                     for (i32 z = 0; z < TPool::BRICK_SIZE - 1; z++)
-    //                     {
-    //                         for (i32 y = 0; y < TPool::BRICK_SIZE - 1; y++)
-    //                         {
-    //                             for (i32 x = 0; x < TPool::BRICK_SIZE - 1; x++)
-    //                             {
-    //                                 Vec3i dst_voxel = brick_id * (TPool::BRICK_SIZE - 1) + Vec3i{x, y, z};
-    //                                 Vec3i src_voxel = dst_voxel * 2;
-                                    
-    //                                 Vec4 downsampled{0};
-                                    
-    //                                 std::array<f32, 3 * 3> kernel_02 {
-    //                                     1.f / 64.f, 2.f / 64.f, 1.f/ 64.f,
-    //                                     2.f / 64.f, 4.f / 64.f, 2.f/ 64.f,
-    //                                     1.f / 64.f, 2.f / 64.f, 1.f/ 64.f
-    //                                 };
-    //                                 std::array<f32, 3 * 3> kernel_1 {
-    //                                     2.f / 64.f, 4.f / 64.f, 2.f/ 64.f,
-    //                                     4.f / 64.f, 8.f / 64.f, 4.f/ 64.f,
-    //                                     2.f / 64.f, 4.f / 64.f, 2.f/ 64.f,
-    //                                 };
-    //                                 for(i32 i=0; i<3; i++) {
-    //                                     for (i32 j= 0; j<3; j++)
-    //                                     {
-    //                                         downsampled += load_voxel_level(src_voxel - Vec3i{i - 1, j - 1, -1}, depth + 1) * kernel_02.at(i * 3 + j);
-    //                                     }
-    //                                 }
-    //                                 for(i32 i=0; i<3; i++) {
-    //                                     for (i32 j= 0; j<3; j++)
-    //                                     {
-    //                                         downsampled += load_voxel_level(src_voxel - Vec3i{i - 1, j - 1, 0}, depth + 1) * kernel_1.at(i * 3 + j);
-    //                                     }
-    //                                 }
-    //                                 for(i32 i=0; i<3; i++) {
-    //                                     for (i32 j= 0; j<3; j++)
-    //                                     {
-    //                                         downsampled += load_voxel_level(src_voxel - Vec3i{i - 1, j - 1, 1}, depth + 1) * kernel_02.at(i * 3 + j);
-    //                                     }
-    //                                 }
-
-    //                                 store_voxel_level(dst_voxel, depth, downsampled);
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-
-    //         for (BrickInfo brick_info : bricks_at_depth_[depth])
-    //         {
-    //             Vec3i brick_id = brick_info.id;
-    //             i32 address = brick_info.address;
-
-    //             // copy edges to neighbour bricks! (might need to allocate new nodes!)
-    //             if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter)
-    //             {
-    //                 // iterate all sides
-    //                 //static_cast(false);
-    //             }
-    //             else if (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
-    //             {
-    //                 copy_border({brick_id, depth}, address,
-    //                             {.begin = Vec3i{},
-    //                              .end = {1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1},
-    //                              .brick_neighbour_offset = {-1, 0, 0}});
-    //                 copy_border({brick_id, depth}, address, {.begin = {}, .end = {TPool::BRICK_SIZE - 1, 1, TPool::BRICK_SIZE - 1}, .brick_neighbour_offset = {0, -1, 0}});
-    //                 copy_border({brick_id, depth}, address, {.begin = {}, .end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 1}, .brick_neighbour_offset = {0, 0, -1}});
-    //                 //
-    //                 copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, 1, TPool::BRICK_SIZE - 1}, .brick_neighbour_offset = {-1, -1, 0}});
-    //                 copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, TPool::BRICK_SIZE - 1, 1}, .brick_neighbour_offset = {-1, 0, -1}});
-    //                 copy_border({brick_id, depth}, address, {.begin = {}, .end = {TPool::BRICK_SIZE - 1, 1, 1}, .brick_neighbour_offset = {0, -1, -1}});
-    //                 //
-    //                 copy_border({brick_id, depth}, address, {.begin = {}, .end = {1, 1, 1}, .brick_neighbour_offset = {-1, -1, -1}});
-    //             }
-    //         }
-
-    //         // todo: pass that replaces constant voxels will single color and frees the brick
-    //     }
-    // }
 };
 
 // void generate_plane(SvoPool & pool, Plane plane, Obb cube, i32 max_octree_depth, Vec4 color) {

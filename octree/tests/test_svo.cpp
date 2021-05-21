@@ -98,54 +98,70 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
 
     // for node corner size 4 at level 1:
     // 6 samples from -1 to 1
-    REQUIRE(voxel_size == Approx(2.f / 5.f));
+    REQUIRE(voxel_size == Approx(2.f / 6.f));
     const i32 res = svo.get_voxel_res(max_depth);
-    REQUIRE(res == 6);
+    REQUIRE(res == 7);
     for(i32 i=0; i<res; i++) {
         for(i32 j=0; j<res; j++) {
-            svo.set_color_at_location(Vec3{-1 + i * voxel_size, -1 + j * voxel_size, -0.5f * voxel_size}, Vec4{1, 0, 0, 1});
+            svo.set_color_at_location(Vec3{-1 + i * voxel_size, -1 + j * voxel_size, -voxel_size}, Vec4{1, 0, 0, 1});
         }
     }
     
-    // test at sample pos
-    {
-        Vec4 sample = svo.sample_color_at_location({-1, -1, -0.5f * voxel_size});
-        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    SECTION( "sampling at voxel position" ) {
+        {
+            Vec4 sample = svo.sample_color_at_location({-1, -1, -voxel_size});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
     }
-    // test between sample pos within a brick
-    {
-        Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1, -0.5f * voxel_size});
-        require_approx_eq(sample, Vec4{1, 0, 0, 1});
-    }
-    {
-        Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, -0.5f * voxel_size});
-        require_approx_eq(sample, Vec4{1, 0, 0, 1});
-    }
-    {
-        Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, 0});
-        require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+    SECTION( "interpolating non-border voxels" ) {
+        {
+            Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1, -voxel_size});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, -voxel_size});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({-1 + 0.5f * voxel_size, -1 + 0.5f * voxel_size, -1.5f * voxel_size});
+            require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+        }
     }
 
-    svo.transfer_border_voxels();
+    svo.build_tree();
 
-    // test on the border (needs transfer to neighbour for correct sample value)
-    {
-        Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1, -0.5f * voxel_size});
-        require_approx_eq(sample, Vec4{1, 0, 0, 1});
+    SECTION( "interpolating border voxels" ) {
+        {
+            Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1,-voxel_size});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({-1, -1 + 2.5f * voxel_size, -voxel_size});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1 + 2.5f * voxel_size, -voxel_size});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1 + 2.5f * voxel_size, -0.5f * voxel_size});
+            require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+        }
     }
-    {
-        Vec4 sample = svo.sample_color_at_location({-1, -1 + 2.5f * voxel_size, -0.5f * voxel_size});
-        require_approx_eq(sample, Vec4{1, 0, 0, 1});
-    }
-    {
-        Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1 + 2.5f * voxel_size, -0.5f * voxel_size});
-        require_approx_eq(sample, Vec4{1, 0, 0, 1});
-    }
-    {
-        Vec4 sample = svo.sample_color_at_location({-1 + 2.5f * voxel_size, -1 + 2.5f * voxel_size, 0});
-        require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+
+    SECTION("sample at downsampled level") {
+        {
+            Vec4 sample = svo.sample_color_at_location_level({-1, -1, -1.f + voxel_size * 2.f}, 0);
+            require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location_level({-1, -1, -1.f + voxel_size * 3.f}, 0);
+            require_approx_eq(sample, Vec4{0.25f, 0, 0, 0.25f});
+        }
     }
 }
+
+// todo: random test against a 3d brick, random colros and sampling locations
 
 TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]") {
 }
