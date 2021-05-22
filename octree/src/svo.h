@@ -544,23 +544,46 @@ struct Svo {
             {
                 if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter)
                 {
+                    // 6 sides
                     copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {2, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 0, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, -1, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 2}, .neighbour_offset = {0, 0, -1}});
                     copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, 1}, .voxels_end = {TPool::BRICK_SIZE -1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, 0, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE -1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, 1, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {1, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, 0, 1}});
+                    // 12 edges
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {2, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, -1, 0}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {2, TPool::BRICK_SIZE - 1, 2}, .neighbour_offset = {-1, 0, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, 2}, .neighbour_offset = {0, -1, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, -1, 0}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 2}, .neighbour_offset = {1, 0, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 2}, .neighbour_offset = {0, 1, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, 1}, .voxels_end = {2, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 1, 0}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {2, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 0, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, -1, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, 1, 0}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, 0, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, 1, 1}});
+                    // 8 corners
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, 1}, .voxels_end = {2, 2, 2}, .neighbour_offset = {-1, -1, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {2, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, -1, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, 1}, .voxels_end = {2, TPool::BRICK_SIZE - 1, 2}, .neighbour_offset = {-1, 1, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2}, .voxels_end = {2, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 1, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, 2}, .neighbour_offset = {1, -1, -1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, -1, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, 1, 1}});
                 }
                 else if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
                 {
+                    // 3 sides
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 0, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {TPool::BRICK_SIZE - 1, 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {0, -1, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 1}, .neighbour_offset = {0, 0, -1}});
-                    //
+                    // 3 edges
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, -1, 0}});
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, TPool::BRICK_SIZE - 1, 1}, .neighbour_offset = {-1, 0, -1}});
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {TPool::BRICK_SIZE - 1, 1, 1}, .neighbour_offset = {0, -1, -1}});
-                    //
+                    // 1 corner
                     copy_border(brick_id, depth, {.voxels_begin = {}, .voxels_end = {1, 1, 1}, .neighbour_offset = {-1, -1, -1}});
                 }
             }
