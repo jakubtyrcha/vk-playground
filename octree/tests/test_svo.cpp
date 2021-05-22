@@ -245,12 +245,37 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
     }
 }
 
-// todo: test a gradient 
-// todo: random test against a 3d brick, random colros and sampling locations
-
 // test
-// different swizzle, brick params (resolution & node centers), depth (0, 1, 5)
+// rightermost and leftermost edges
 
-// build a plane SVO
-// cast a few rays, hits & misses, ray in an opposite direction
-// color interpolation, volume accumulation
+// one super test:
+// gradient is simple x,y,z function - easy to generate and test
+// test different modes, brick sizes (odd, even) and depths (2)
+// generate 100s of sampling positions
+
+TEST_CASE( "Can interpolate gradients", "svo") {
+    SvoPool<5, BrickVoxelPosition::NodeCorner> pool;
+    pool.reset(10000, 10000);
+
+    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    i32 max_depth = 2;
+    Svo svo{pool, volume, max_depth};
+    const f32 voxel_size = svo.get_voxel_world_size();
+
+    const i32 res = svo.get_voxel_res(max_depth);
+    for(i32 z = 0; z < res; z++)
+    {
+        for (i32 y = 0; y < res; y++)
+        {
+            for (i32 x = 0; x < res; x++)
+            {
+                Vec3 sample_pos = Vec3{x, y, z} * voxel_size - Vec3{1};
+                svo.set_color_at_location(sample_pos, Vec4{sample_pos, 1});
+            }
+        }
+    }
+    svo.build_tree();
+
+    Vec4 sample = svo.sample_color_at_location(Vec3{0.1f});
+    require_approx_eq(sample, Vec4{0.1f, 0.1f, 0.1f, 1.f});
+}
