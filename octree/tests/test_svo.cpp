@@ -308,19 +308,59 @@ TEMPLATE_TEST_CASE( "Can interpolate gradients", "[svo][template]",
     }
     svo.build_tree();
 
-    const Vec3 ray_dir = glm::normalize(Vec3{1});
-    f32 step = voxel_size * 0.5f;
-
-    for(i32 depth = max_depth; depth >=0; depth--)
     {
-        step *= 2.f;
-        Vec3 ray_origin{-1};
-        // this can't interpolate well on the outer border for node center mode
-        ray_origin += step * Vec3{glm::sqrt(2.f)};
-        for (; glm::all(glm::lessThan(ray_origin, Vec3{1 - step * glm::sqrt(2.f)})); ray_origin += step * ray_dir)
+        const Vec3 ray_dir = glm::normalize(Vec3{1});
+        f32 step = voxel_size * 0.5f;
+
+        for (i32 depth = max_depth; depth >= 0; depth--)
         {
-            Vec4 sample = svo.sample_color_at_location_level(ray_origin, depth);
-            require_approx_eq(sample, Vec4{ray_origin, 1.f});
+            step *= 2.f;
+            Vec3 ray_origin{-1};
+            // this can't interpolate well on the outer border for node center mode
+            ray_origin += step * Vec3{glm::sqrt(2.f)};
+            for (; glm::all(glm::lessThan(ray_origin, Vec3{1 - step * glm::sqrt(2.f)})); ray_origin += step * ray_dir)
+            {
+                Vec4 sample = svo.sample_color_at_location_level(ray_origin, depth);
+                require_approx_eq(sample, Vec4{ray_origin, 1.f});
+            }
+        }
+    }
+    {
+        const Vec3 ray_dir = glm::normalize(Vec3{1,0,0} - Vec3{-1, 1, -1});
+        f32 step = voxel_size * 0.5f;
+
+        for (i32 depth = max_depth; depth >= 0; depth--)
+        {
+            step *= 2.f;
+            Vec3 ray_origin{-1};
+            // this can't interpolate well on the outer border for node center mode
+            ray_origin += step * Vec3{glm::sqrt(2.f)};
+            for (; glm::all(glm::lessThan(ray_origin, Vec3{1 - step * glm::sqrt(2.f)})) &&
+            glm::all(glm::greaterThan(ray_origin, Vec3{-1 + step * glm::sqrt(2.f)}))
+            ; ray_origin += step * ray_dir)
+            {
+                Vec4 sample = svo.sample_color_at_location_level(ray_origin, depth);
+                require_approx_eq(sample, Vec4{ray_origin, 1.f});
+            }
+        }
+    }
+    {
+        const Vec3 ray_dir = glm::normalize(Vec3{0,1,0} - Vec3{1, -1, -1});
+        f32 step = voxel_size * 0.5f;
+
+        for (i32 depth = max_depth; depth >= 0; depth--)
+        {
+            step *= 2.f;
+            Vec3 ray_origin{-1};
+            // this can't interpolate well on the outer border for node center mode
+            ray_origin += step * Vec3{glm::sqrt(2.f)};
+            for (; glm::all(glm::lessThan(ray_origin, Vec3{1 - step * glm::sqrt(2.f)})) &&
+            glm::all(glm::greaterThan(ray_origin, Vec3{-1 + step * glm::sqrt(2.f)}))
+            ; ray_origin += step * ray_dir)
+            {
+                Vec4 sample = svo.sample_color_at_location_level(ray_origin, depth);
+                require_approx_eq(sample, Vec4{ray_origin, 1.f});
+            }
         }
     }
 }
