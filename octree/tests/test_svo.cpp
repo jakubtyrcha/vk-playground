@@ -332,7 +332,7 @@ TEMPLATE_TEST_CASE( "Can interpolate gradients", "[svo][template]",
         for (i32 depth = max_depth; depth >= 0; depth--)
         {
             step *= 2.f;
-            Vec3 ray_origin{-1};
+            Vec3 ray_origin{1,0,0};
             // this can't interpolate well on the outer border for node center mode
             ray_origin += step * Vec3{glm::sqrt(2.f)};
             for (; glm::all(glm::lessThan(ray_origin, Vec3{1 - step * glm::sqrt(2.f)})) &&
@@ -351,7 +351,7 @@ TEMPLATE_TEST_CASE( "Can interpolate gradients", "[svo][template]",
         for (i32 depth = max_depth; depth >= 0; depth--)
         {
             step *= 2.f;
-            Vec3 ray_origin{-1};
+            Vec3 ray_origin{0,1,0};
             // this can't interpolate well on the outer border for node center mode
             ray_origin += step * Vec3{glm::sqrt(2.f)};
             for (; glm::all(glm::lessThan(ray_origin, Vec3{1 - step * glm::sqrt(2.f)})) &&
