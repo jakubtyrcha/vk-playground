@@ -263,7 +263,9 @@ struct Svo {
         // calculate voxel coord
         const f32 sample_distance = get_voxel_normalised_size(max_depth_);
         const Vec3 voxel_coord = local_normalised_position / sample_distance + get_normalised_position_to_sample_offset();
-        const Vec3i voxel_icoord = voxel_coord + 0.5f; // rounding
+        Vec3i voxel_icoord = voxel_coord + 0.5f; // rounding
+        // if we hit voxel at 1., we need to clamp so it's stored within non-border voxel
+        voxel_icoord = glm::min(voxel_icoord, get_voxel_res(max_depth_) - 1);
 
         // we need to round the proximity of the sample to that sample index
         // it's not necessary when sampling later (as we have the border anyway)
@@ -623,6 +625,7 @@ struct Svo {
                     copy_border(brick_id, depth, {.voxels_begin = {1, TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2}, .voxels_end = {2, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {-1, 1, 1}});
                     copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, 2}, .neighbour_offset = {1, -1, -1}});
                     copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, 1, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, 2, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, -1, 1}});
+                    copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2, 1}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, 2}, .neighbour_offset = {1, 1, -1}});
                     copy_border(brick_id, depth, {.voxels_begin = {TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2, TPool::BRICK_SIZE - 2}, .voxels_end = {TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1, TPool::BRICK_SIZE - 1}, .neighbour_offset = {1, 1, 1}});
                 }
                 else if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)

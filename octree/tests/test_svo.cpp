@@ -86,7 +86,7 @@ void require_approx_eq(Vec4 const& a, Vec4 const& b) {
     REQUIRE(a.w == Approx(b.w));
 }
 
-TEMPLATE_TEST_CASE( "Can sample the edges", "[svo][template]",
+TEMPLATE_TEST_CASE( "Can sample at the edges", "[svo][template]",
     (SvoPool<4, BrickVoxelPosition::NodeCorner>),
     (SvoPool<3, BrickVoxelPosition::NodeCorner>),
     (SvoPool<5, BrickVoxelPosition::NodeCenter>),
@@ -110,6 +110,9 @@ TEMPLATE_TEST_CASE( "Can sample the edges", "[svo][template]",
         const Vec3 p{ i & 1, (i >> 1) & 1, (i >> 2) & 1 };
         Vec4 s = svo.sample_color_at_location(p * Vec3{2} - Vec3{1});
         require_approx_eq(s, Vec4{p, 1});
+
+        // Vec4 s0 = svo.sample_color_at_location_level(p * Vec3{2} - Vec3{1}, 0);
+        // require_approx_eq(s0, Vec4{p, 1});
     }
 }
 
