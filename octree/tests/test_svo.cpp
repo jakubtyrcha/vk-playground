@@ -178,6 +178,12 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
                 -0.5f * voxel_size}, 
                 Vec4{1, 0, 0, 1}
             );
+            svo.set_color_at_location(Vec3{
+                -1 + 0.5f * voxel_size + i * voxel_size, 
+                -1 + 0.5f * voxel_size + j * voxel_size, 
+                0.5f * voxel_size}, 
+                Vec4{0, 1, 0, 1}
+            );
         }
     }
 
@@ -203,6 +209,31 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
             Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0.5f, 0.5f, 1}});
             require_approx_eq(sample, Vec4{1, 0, 0, 1});
         }
+    }
+
+    svo.build_tree();
+
+    SECTION( "interpolating border voxels" ) {
+        {
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{1.5f, 0, 1}});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0, 1.5f, 1}});
+            require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        }
+        {
+            Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{0, 0, 1.5f}});
+            require_approx_eq(sample, Vec4{0.5f, 0.5f, 0, 1});
+        }
+        // {
+        //     Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{1.5f, 1.5f, 1}});
+        //     require_approx_eq(sample, Vec4{1, 0, 0, 1});
+        // }
+        // {
+        //     Vec4 sample = svo.sample_color_at_location({v000_sample + voxel_size * Vec3{1.5f, 1.5f, 1.5f}});
+        //     require_approx_eq(sample, Vec4{0.5f, 0, 0, 0.5f});
+        // }
     }
 }
 
