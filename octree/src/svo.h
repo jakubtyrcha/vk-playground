@@ -228,11 +228,12 @@ struct Svo {
 
     std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord, const i32 depth) const {
         assert(glm::all(glm::greaterThanEqual(voxel_coord, {})));
-        assert(glm::all(glm::lessThan(voxel_coord, Vec3i{get_voxel_res(depth)})));
+        assert(glm::all(glm::lessThanEqual(voxel_coord, Vec3i{get_voxel_res(depth)})));
 
         // *-|-*--*-|-*
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             Vec3i brick_id = voxel_coord / (TPool::BRICK_SIZE - 2);
+            brick_id = glm::min(brick_id, get_bricks_num_per_side(depth) - 1);
             return std::make_tuple(brick_id, voxel_coord - brick_id * (TPool::BRICK_SIZE - 2) + 1);
         }
         // |*--*--*|
@@ -341,8 +342,25 @@ struct Svo {
 
         Vec3i neighbour_id = brick_id + span.neighbour_offset;
 
-        if (glm::any(glm::lessThan(neighbour_id, Vec3i{})) || glm::any(glm::greaterThanEqual(neighbour_id, Vec3i{get_bricks_num_per_side(depth)})))
+        const bool dst_brick_outside_octree = glm::any(glm::lessThan(neighbour_id, Vec3i{})) || glm::any(glm::greaterThanEqual(neighbour_id, Vec3i{get_bricks_num_per_side(depth)}));
+
+        if (dst_brick_outside_octree)
         {
+            if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter)
+            {
+                // copy to the local border
+                auto & dst_brick = pool_.get_brick(request_committed_brick_mem(brick_id, depth));
+                for(i32 z=span.voxels_begin.z; z<span.voxels_end.z; z++) {
+                    for(i32 y=span.voxels_begin.y; y<span.voxels_end.y; y++) {
+                        for(i32 x=span.voxels_begin.x; x<span.voxels_end.x; x++) {
+                            Vec3i offset = span.neighbour_offset;
+                            Vec3i dst_texel = Vec3i{x, y, z} + offset;
+                            dst_brick.set_voxel_color(dst_texel, src_brick.fetch({x, y, z}));
+                        }
+                    }
+                }
+            }
+
             return;
         }
 

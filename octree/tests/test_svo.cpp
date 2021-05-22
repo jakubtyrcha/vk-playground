@@ -51,7 +51,7 @@ TEMPLATE_TEST_CASE( "Can fill brick texels and do a bilinear sample", "[svo][tem
     }
 }
 
-TEST_CASE( "Can find child index", "[svo]" ) {
+TEST_CASE( "Can find the child index", "[svo]" ) {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(1, 1);
     Obb volume{.center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1}};
@@ -84,6 +84,33 @@ void require_approx_eq(Vec4 const& a, Vec4 const& b) {
     REQUIRE(a.y == Approx(b.y));
     REQUIRE(a.z == Approx(b.z));
     REQUIRE(a.w == Approx(b.w));
+}
+
+TEMPLATE_TEST_CASE( "Can sample the edges", "[svo][template]",
+    (SvoPool<4, BrickVoxelPosition::NodeCorner>),
+    (SvoPool<3, BrickVoxelPosition::NodeCorner>),
+    (SvoPool<5, BrickVoxelPosition::NodeCenter>),
+    (SvoPool<4, BrickVoxelPosition::NodeCenter>)
+) {
+    TestType pool;
+    pool.reset(10000, 10000);
+
+    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    i32 max_depth = 1;
+    Svo svo{pool, volume, max_depth};
+
+    for(int i=0; i<8; i++) {
+        const Vec3 p{ i & 1, (i >> 1) & 1, (i >> 2) & 1 };
+        svo.set_color_at_location(p * Vec3{2} - Vec3{1}, Vec4{p, 1});
+    }
+    
+    svo.build_tree();
+
+    for(int i=0; i<8; i++) {
+        const Vec3 p{ i & 1, (i >> 1) & 1, (i >> 2) & 1 };
+        Vec4 s = svo.sample_color_at_location(p * Vec3{2} - Vec3{1});
+        require_approx_eq(s, Vec4{p, 1});
+    }
 }
 
 TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]") {
