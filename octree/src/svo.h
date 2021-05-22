@@ -227,10 +227,8 @@ struct Svo {
     }
 
     std::tuple<Vec3i, Vec3i> get_brick_id_and_brick_coord(Vec3i voxel_coord, const i32 depth) const {
-        // TODO: assert?
         assert(glm::all(glm::greaterThanEqual(voxel_coord, {})));
         assert(glm::all(glm::lessThan(voxel_coord, Vec3i{get_voxel_res(depth)})));
-        //voxel_coord = glm::min(voxel_coord, get_voxel_res(depth) - 1);
 
         // *-|-*--*-|-*
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
@@ -411,7 +409,7 @@ struct Svo {
 
     // skips border voxels
     std::optional<Vec4> try_load_voxel_level(const Vec3i voxel, const i32 depth) {
-        const bool valid_sample = glm::all(glm::greaterThanEqual(voxel, {})) &&glm::all(glm::lessThan(voxel, Vec3i{get_voxel_res(depth)}));        
+        const bool valid_sample = glm::all(glm::greaterThanEqual(voxel, {})) && glm::all(glm::lessThan(voxel, Vec3i{get_voxel_res(depth)}));        
         if(!valid_sample) {
             return std::nullopt;
         }
@@ -469,14 +467,50 @@ struct Svo {
                 for (Vec3i brick_id : bricks)
                 {
                     if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+                        for (i32 z = 0; z < TPool::BRICK_SIZE - 2; z++)
+                        {
+                            for (i32 y = 0; y < TPool::BRICK_SIZE - 2; y++)
+                            {
+                                for (i32 x = 0; x < TPool::BRICK_SIZE - 2; x++)
+                                {
+                                    Vec3i dst_voxel = brick_id * (TPool::BRICK_SIZE - 2) + Vec3i{x, y, z};
+                                    Vec3i src_voxel = dst_voxel * 2;
+
+                                    Vec4 downsampled{0};
+                                    f32 w{0};
+
+                                    for (i32 i = 0; i < 2; i++)
+                                    {
+                                        for (i32 j = 0; j < 2; j++)
+                                        {
+                                            for (i32 k = 0; k < 2; k++)
+                                            {
+                                                auto maybe_sample = try_load_voxel_level(src_voxel + Vec3i{i, j, k}, depth + 1);
+                                                if(maybe_sample)
+                                                {
+                                                    downsampled += (*maybe_sample);
+                                                    w += 1.f;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // to avoid NaN
+                                    if(w == 0) {
+                                        w = 1.f;
+                                    }
+                                    store_voxel_level(dst_voxel, depth, downsampled / w);
+                                }
+                            }
+                        }
                     }
                     else if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
                     {
-                        for (i32 z = 0; z < TPool::BRICK_SIZE; z++)
+                        for (i32 z = 0; z < TPool::BRICK_SIZE - 1; z++)
                         {
-                            for (i32 y = 0; y < TPool::BRICK_SIZE; y++)
+                            for (i32 y = 0; y < TPool::BRICK_SIZE - 1; y++)
                             {
-                                for (i32 x = 0; x < TPool::BRICK_SIZE; x++)
+                                for (i32 x = 0; x < TPool::BRICK_SIZE - 1; x++)
                                 {
                                     Vec3i dst_voxel = brick_id * (TPool::BRICK_SIZE - 1) + Vec3i{x, y, z};
                                     Vec3i src_voxel = dst_voxel * 2;

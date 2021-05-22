@@ -235,6 +235,14 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
             require_approx_eq(sample, Vec4{0.5f, 0.5f, 0, 1.f});
         }
     }
+
+    SECTION("sample at downsampled level") {
+        Vec3 v000_sample_0 {-1 + 0.5f * voxel_size * 2};
+        {
+            Vec4 sample = svo.sample_color_at_location_level({}, 0);
+            require_approx_eq(sample, Vec4{0.25f, 0.25f, 0, 0.5f});
+        }
+    }
 }
 
 // todo: test a gradient 
