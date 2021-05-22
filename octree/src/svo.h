@@ -245,6 +245,15 @@ struct Svo {
         }
     }
 
+    Vec3 get_first_voxel_world_offset() const {
+        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            return get_voxel_world_size() * Vec3{0.5f};
+        }
+        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            return {};
+        }
+    }
+
     static constexpr Vec3 get_normalised_position_to_sample_offset() {
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             return Vec3{-0.5f};
