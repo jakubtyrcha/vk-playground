@@ -486,6 +486,11 @@ struct Svo {
                 // downsample
                 for (Vec3i brick_id : bricks)
                 {
+                    const Vec3i neighbour_id = brick_id + Vec3i{1, 1, 1};
+                    const auto neighbour_outside = glm::greaterThanEqual(neighbour_id, Vec3i{get_bricks_num_per_side(depth)});
+
+                    // the border voxels will be calculated in the neighbour and copies (except if there's no neighbour)
+
                     if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
                         for (i32 z = 0; z < TPool::BRICK_SIZE - 2; z++)
                         {
@@ -526,11 +531,6 @@ struct Svo {
                     }
                     else if constexpr (TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner)
                     {
-                        const Vec3i neighbour_id = brick_id + Vec3i{1, 1, 1};
-                        const auto neighbour_outside = glm::greaterThanEqual(neighbour_id, Vec3i{get_bricks_num_per_side(depth)});
-
-                        // the border voxels will be calculated in the neighbour and copies (except if there's no neighbour)
-
                         for (i32 z = 0; z < TPool::BRICK_SIZE - 1 + neighbour_outside.x; z++)
                         {
                             for (i32 y = 0; y < TPool::BRICK_SIZE - 1 + neighbour_outside.y; y++)

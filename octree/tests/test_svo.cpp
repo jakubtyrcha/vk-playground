@@ -88,9 +88,9 @@ void require_approx_eq(Vec4 const& a, Vec4 const& b) {
 
 TEMPLATE_TEST_CASE( "Can sample at the edges", "[svo][template]",
     (SvoPool<4, BrickVoxelPosition::NodeCorner>),
-    (SvoPool<3, BrickVoxelPosition::NodeCorner>)
-    // (SvoPool<5, BrickVoxelPosition::NodeCenter>),
-    // (SvoPool<4, BrickVoxelPosition::NodeCenter>)
+    (SvoPool<3, BrickVoxelPosition::NodeCorner>),
+    (SvoPool<5, BrickVoxelPosition::NodeCenter>),
+    (SvoPool<4, BrickVoxelPosition::NodeCenter>)
 ) {
     TestType pool;
     pool.reset(10000, 10000);
@@ -112,7 +112,12 @@ TEMPLATE_TEST_CASE( "Can sample at the edges", "[svo][template]",
         require_approx_eq(s, Vec4{p, 1});
 
         Vec4 s0 = svo.sample_color_at_location_level(p * Vec3{2} - Vec3{1}, 0);
-        require_approx_eq(s0, Vec4{p, 1} * Vec4{8.f / 27.f});
+        if constexpr(TestType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            require_approx_eq(s0, Vec4{p, 1} * Vec4{1.f / 8.f});
+        }
+        else if constexpr(TestType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            require_approx_eq(s0, Vec4{p, 1} * Vec4{8.f / 27.f});
+        }
     }
 }
 
@@ -283,8 +288,18 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
 // test different modes, brick sizes (odd, even) and depths (2)
 // generate 100s of sampling positions
 
-TEST_CASE( "Can interpolate gradients", "svo") {
-    SvoPool<5, BrickVoxelPosition::NodeCorner> pool;
+// (SvoPool<4, BrickVoxelPosition::NodeCorner>),
+// (SvoPool<3, BrickVoxelPosition::NodeCorner>),
+// (SvoPool<5, BrickVoxelPosition::NodeCenter>),
+// (SvoPool<4, BrickVoxelPosition::NodeCenter>)
+
+TEMPLATE_TEST_CASE( "Can interpolate gradients", "[svo][template]",
+// (SvoPool<4, BrickVoxelPosition::NodeCorner>),
+// (SvoPool<3, BrickVoxelPosition::NodeCorner>)
+(SvoPool<5, BrickVoxelPosition::NodeCenter>)
+//(SvoPool<4, BrickVoxelPosition::NodeCenter>)
+) {
+    TestType pool;
     pool.reset(10000, 10000);
 
     Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
@@ -306,6 +321,17 @@ TEST_CASE( "Can interpolate gradients", "svo") {
     }
     svo.build_tree();
 
-    Vec4 sample = svo.sample_color_at_location(Vec3{0.1f});
-    require_approx_eq(sample, Vec4{0.1f, 0.1f, 0.1f, 1.f});
+    const Vec3 ray_origin{-1};
+    const Vec3 ray_dir = glm::normalize(Vec3{1});
+    const f32 step = voxel_size * 0.5f;
+
+    for(Vec3 p = ray_origin; glm::all(glm::lessThan(p, Vec3{1})); p += step * ray_dir) {
+        Vec4 sample = svo.sample_color_at_location(p);
+        require_approx_eq(sample, Vec4{p, 1.f});
+    }
+
+    // for(Vec3 p = ray_origin; glm::all(glm::lessThan(p, Vec3{1})); p += step * ray_dir) {
+    //     Vec4 sample = svo.sample_color_at_location_level(p, 0);
+    //     require_approx_eq(sample, Vec4{p, 1.f});
+    // }
 }
