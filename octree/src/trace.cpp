@@ -32,6 +32,10 @@ struct ImageBuffer {
         u8Vec4 qcolor = glm::clamp(color * Vec4{255}, {}, {255});
         data_[texel.x + texel.y * resolution_.x] = qcolor;
     }
+
+    void save_to_file(const char * filename) {
+        stbi_write_png(filename, resolution_.x, resolution_.y, 4, data(), get_stride());
+    }
 };
 
 int main() {
@@ -73,7 +77,7 @@ int main() {
         }
     }
 
-    stbi_write_png("image.png", resolution.x, resolution.y, 4, image_buffer.data(), image_buffer.get_stride());
+    image_buffer.save_to_file("image.png");
 
     return 0;
 }
