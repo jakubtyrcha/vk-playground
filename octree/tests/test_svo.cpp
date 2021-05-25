@@ -364,3 +364,134 @@ TEMPLATE_TEST_CASE( "Can interpolate gradients", "[svo][template]",
         }
     }
 }
+
+TEST_CASE("Can trace ray through the brick", "[svo_trace]")
+{
+    SECTION("Trace for a voxel in the middle")
+    {
+        BrickPayload<4, BrickLayout::Linear> brick;
+        brick.init();
+
+        brick.set_voxel_color({1, 1, 1}, Vec4{1});
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 0};
+            Vec3 dir = Vec3{0, 0, 1};
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 4.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 0};
+            Vec3 dir = glm::normalize(Vec3{0.000001, 0.000001, 1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 4.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 0};
+            Vec3 dir = glm::normalize(Vec3{-0.000001, 0.000001, 1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 4.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 0};
+            Vec3 dir = glm::normalize(Vec3{-0.000001, -0.000001, 1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 4.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 1};
+            Vec3 dir = Vec3{0, 0, -1};
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 2.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 1};
+            Vec3 dir = glm::normalize(Vec3{0.000001, 0.000001, -1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 2.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 1};
+            Vec3 dir = glm::normalize(Vec3{-0.000001, 0.000001, -1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 2.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 1};
+            Vec3 dir = glm::normalize(Vec3{0.000001, -0.000001, -1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 2.f));
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, 1};
+            Vec3 dir = glm::normalize(Vec3{-0.000001, -0.000001, -1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(1.f / 2.f));
+        }
+        {
+            Vec3 origin = Vec3{1, 0.3f, 1};
+            Vec3 dir = glm::normalize(Vec3{-1, 0, -1});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(sqrtf(2 * square(0.5f))));
+        }
+        {
+            Vec3 origin = Vec3{1, 0.3f, 1};
+            Vec3 dir = glm::normalize(Vec3{-1, 0, 0});
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(!result);
+        }
+        {
+            Vec3 origin = Vec3{0.3, 0.3, -2};
+            Vec3 dir = Vec3{0, 0, 1};
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(2.f + 1.f / 4.f));
+        }
+    }
+    SECTION("Trace for a voxel at the edge") {
+        BrickPayload<4, BrickLayout::Linear> brick;
+        brick.init();
+
+        brick.set_voxel_color({0, 0, 0}, Vec4{1});
+        brick.set_voxel_color({3, 3, 3}, Vec4{1});
+
+        {
+            Vec3 origin = Vec3{0.2f, 0.2f, 1};
+            Vec3 dir = Vec3{0, 0, -1};
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(0.75f));
+        }
+
+        {
+            Vec3 origin = Vec3{0.9f, 0.9f, 0};
+            Vec3 dir = Vec3{0, 0, 1};
+            Vec3 inv_dir = 1.f / dir;
+            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            REQUIRE(result);
+            REQUIRE(result->t == Approx(0.75f));
+        }
+    }
+}

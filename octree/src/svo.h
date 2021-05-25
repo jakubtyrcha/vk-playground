@@ -2,6 +2,7 @@
 #include <array>
 #include <tuple>
 #include <optional>
+#include <glm/gtx/extended_min_max.hpp>
 
 enum class BrickVoxelPosition {
     NodeCenter,
@@ -103,6 +104,75 @@ struct BrickPayload {
 
         return c0 + c1 * delta.x + c2 * delta.y + c3 * delta.z + c4 * delta.x * delta.y
             + c5 * delta.y * delta.z + c6 * delta.z * delta.x + c7 * delta.x * delta.y * delta.z;
+    }
+
+    struct RayHit {
+        Vec4 color;
+        f32 t;
+    };
+
+    // trace in normalised brick space [0..1]
+    // each voxel is considered uniform in color (no interpolation)
+    static std::optional<RayHit> trace_ray_start_in_brick(
+        BrickPayload const & brick,
+        Vec3 const & ray_origin,
+        Vec3 const & inv_ray_dir
+    ) 
+    {
+        static constexpr f32 inv_brick_size = 1.f / BRICK_SIZE;
+        Vec3i voxel = glm::min(Vec3i{ray_origin * Vec3{BRICK_SIZE}}, Vec3i{BRICK_SIZE - 1});
+        const Vec3i step = glm::sign(inv_ray_dir);
+        f32 current_t = 0;
+
+        while(true) {
+            Vec4 sample = brick.fetch(voxel);
+            bool collision = glm::any(glm::greaterThan(sample, Vec4{}));
+            if(collision) {
+                return RayHit{ .color = sample, .t = current_t };
+            }
+
+            Vec3 exit_planes = Vec3(voxel + Vec3i{glm::greaterThan(inv_ray_dir, Vec3{0})}) * Vec3{inv_brick_size};
+            Vec3 t3 = ((exit_planes - ray_origin) * inv_ray_dir);
+            // for rays parallel to an axis, we might have a negative inf
+            t3 = glm::abs(t3);
+            current_t = glm::fmin(t3.x, t3.y, t3.z);
+
+            voxel += step * Vec3i{glm::equal(t3, Vec3{current_t})};
+
+            if(voxel != glm::clamp(voxel, {}, {BRICK_SIZE - 1})) {
+                break;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    // trace in normalised brick space [0..1]
+    static std::optional<RayHit> trace_ray(
+        BrickPayload const & brick,
+        Vec3 ray_origin,
+        Vec3 const & ray_dir,
+        Vec3 const & inv_ray_dir
+    )
+    {
+        // find t till hit the front plane
+        Vec3 enter_planes = glm::lessThan(inv_ray_dir, Vec3{0});
+        Vec3 t3 = ((enter_planes - ray_origin) * inv_ray_dir);
+        // for rays parallel to an axis, we might have a negative inf
+        t3 = glm::abs(t3);
+        f32 min_t = glm::fmin(t3.x, t3.y, t3.z);
+        f32 t = glm::max(0.f, min_t);
+        if(t > 0) {
+            // move rayo to t, start trace in brick
+            ray_origin += t * ray_dir;
+        }
+
+        auto hit = trace_ray_start_in_brick(brick, ray_origin, inv_ray_dir);
+        if(hit) {
+            hit->t += t;
+            return hit;
+        }
+        return std::nullopt;
     }
 };
 
@@ -292,7 +362,7 @@ struct Svo {
         const Vec3 voxel_coord = local_normalised_position / sample_distance + get_normalised_position_to_sample_offset();
         const Vec3i voxel_icoord = voxel_coord;
 
-        auto [brick_id, brick_coord] = get_brick_id_and_brick_coord(voxel_icoord, depth);
+        auto [brick_id, _] = get_brick_id_and_brick_coord(voxel_icoord, depth);
         i32 brick_address = request_committed_brick_mem(brick_id, depth);
 
         // TODO: depends on brick mode, we need the coord of the leftermost voxel sample?
@@ -460,7 +530,7 @@ struct Svo {
         pool_.get_brick(brick_address).set_voxel_color(brick_coord, color);
     }
 
-    void gather_bricks_at_level(const OctreeNode * traverse_node, const Vec3i traverse_brick_id, const i32 traverse_depth, const i32 requested_depth, std::vector<Vec3i> & acc)
+    void gather_bricks_at_level(const OctreeNode * traverse_node, const Vec3i traverse_brick_id, const i32 traverse_depth, const i32 requested_depth, std::vector<Vec3i> & acc) const
     {
         if(traverse_depth == requested_depth)
         {
@@ -659,3 +729,97 @@ struct Svo {
         }
     }
 };
+
+struct TraceResult
+{
+    Vec4 color;
+    f32 t;
+};
+
+/*
+test scenarios:
+*) non-aabb obb
+*) 
+*/
+
+// constexpr f32 k_traverse_eps = 0.00000001f;
+
+// template<typename TSvo>
+// std::optional<TraceResult> trace_ray(TSvo const & svo, Ray const &ray) 
+// {
+//     // convert ray to local position
+//     Ray local_ray = svo.obb_.to_local(ray);
+//     Vec3 inv_local_ray_dir = Vec3{1.f} / local_ray.dir;
+//     Vec3 half_extent = svo.obb_.half_extent;
+
+//     Vec3 enter_local_vt = (local_ray.origin - Vec3{-half_extent}) * inv_local_ray_dir;
+//     f32 enter_local_t = glm::max(enter_local_vt.x, enter_local_vt.y, enter_local_vt.z);
+//     Vec3 exit_local_vt = (local_ray.origin - Vec3{half_extent}) * inv_local_ray_dir;
+//     f32 exit_local_t = glm::min(exit_local_vt.x, exit_local_vt.y, exit_local_vt.z);
+
+//     if(exit_local_t < 0.f) {
+//         return std::nullopt;
+//     }
+
+//     const f32 voxel_wsize = get_voxel_world_size();
+
+//     local_ray.origin += glm::min(enter_local_t + k_traverse_eps, 0.f) * local_ray.direction;
+//     // find the target node of the current position
+//     Vec3i voxel_coord = (local_ray.origin - half_extent) / get_voxel_world_size();
+
+//     const i32 max_depth = svo.max_depth_;
+//     f32 current_t = enter_local_t > 0 ? 0 : enter_local_t;
+//     Vec3 current_origin = local_ray.origin + current_t * local_ray.direction;
+//     int current_depth = 0;
+//     const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
+//     Vec3i current_node_coord{0};
+//     Vec3i step = glm::sign(local_ray.direction);
+    
+//     while(true) {
+//         //not supported yet
+//         assert(current_node.data_type_flag != OctreeNode::DATA_CONSTANT_COLOR);
+//         i32 children_address = current_node->address;
+//         const i32 width_in_max_depth_nodes = 1 << (max_depth - current_depth);
+
+//         // subdivide if possible
+//         if(current_depth < max_depth && children_address) {
+//             const Vec3i current_node_mid = current_node_coord * width_in_max_depth_nodes + width_in_max_depth_nodes / 2;
+//             auto vec_ge_mid = glm::greaterThanEqual(voxel_coord, current_node_mid);
+            
+//             i32 child_index = vec_ge_mid.x + vec_ge_mid.y * 2 + vec_ge_mid.z * 4;
+
+//             current_node = &svo.pool_.get_node(children_address + child_index);
+//             current_node_coord = current_node_coord * 2 + Vec3i{vec_ge_mid};
+//             current_depth++;
+//             continue;
+//         }
+
+//         // couldn't subdivide, do I have a brick
+//         if(current_node->brick_address) {
+//             // raymarch the brick, return on hit
+//         }
+
+//         // time to move to the end of the cell
+//         // find the id of the neighbour on the same level
+
+//         // TODO: domain
+//         Vec3 exit_planes = (current_node_coord + step) * width_in_max_depth_nodes;
+//         exit_planes *= voxel_wsize;
+
+//         Vec3 t_3 = (local_ray.origin - exit_planes) * inv_local_ray_dir;
+//         current_t = std::min(t_3.x, t_3.y, t_3.z);
+//         current_position = local_ray.origin + current_t * local_ray.direction;
+
+//         Vec3i neighbour_node_id = current_node_coord + glm::equals(t_3, current_t) * step;
+//         // find common ancestor, update current_node to the common ancestor
+//         // Vec3i common_ancestor = glm::highestBitValue(neighbour_node_id & current_node_id);
+//         i32 how_many_steps_to_common_ancestor;
+//         current_node_coord << how_many_steps_to_common_ancestor; // 
+//         // update current node from stack
+
+//         // do stuff to
+
+//     }
+
+//     return std::nullopt;
+// }
