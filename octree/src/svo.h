@@ -118,7 +118,7 @@ namespace Brick {
     template<typename BrickT>
     // trace in normalised brick space [0..1]
     // each voxel is considered uniform in color (no interpolation)
-    static std::optional<RayHit> trace_ray_start_in_brick(
+    std::optional<RayHit> trace_ray_start_in_brick(
         BrickT const & brick,
         Vec3 const & ray_origin,
         Vec3 const & inv_ray_dir
@@ -154,7 +154,7 @@ namespace Brick {
 
     // trace in normalised brick space [0..1]
     template<typename BrickT>
-    static std::optional<RayHit> trace_ray(
+    std::optional<RayHit> trace_ray(
         BrickT const & brick,
         Vec3 ray_origin,
         Vec3 const & ray_dir,
@@ -185,6 +185,55 @@ namespace Brick {
             return hit;
         }
         return std::nullopt;
+    }
+
+    template<typename BrickT>
+    std::optional<RayHit> raymarch_volume(
+        BrickT const & brick,
+        Vec3 ray_origin,
+        Vec3 const & ray_dir,
+        Vec3 const & inv_ray_dir
+    )
+    {
+        f32 t = 0.f;
+        if(glm::any(glm::lessThan(ray_origin, Vec3{})) || glm::any(glm::greaterThan(ray_origin, Vec3{1}))) {
+            // find t till hit the front plane
+            Vec3 enter_planes = glm::lessThan(inv_ray_dir, Vec3{0});
+            Vec3 t3 = ((enter_planes - ray_origin) * inv_ray_dir);
+            f32 max_t = glm::fmax(t3.x, t3.y, t3.z);
+            t = glm::max(0.f, max_t + TRACE_EPS);
+            if(t > 0) {
+                // move rayo to t, start trace in the brick
+                ray_origin += t * ray_dir;
+            }
+
+            // if not in the brick - return immediatelly 
+            if(glm::any(glm::lessThan(ray_origin, Vec3{})) || glm::any(glm::greaterThan(ray_origin, Vec3{1}))) {
+                return std::nullopt;
+            }   
+        }
+
+        Vec4 acc{};
+        {
+            static constexpr f32 inv_brick_size = 1.f / BrickT::Size;
+            const Vec3i step = glm::sign(inv_ray_dir);
+            f32 current_t = 0;
+            const f32 step_size = inv_brick_size * 0.125f;
+            Vec3 current_pos = ray_origin;
+
+            bool in_brick = true;
+            while (acc.w < 1.f && in_brick)
+            {
+                Vec3 sampling_coord = inv_brick_size * 0.5f + current_pos * Vec3{BrickT::Size};
+                Vec4 sample = brick.sample_trilinear(sampling_coord);
+                acc += (1 - acc.w) * sample;
+                
+                current_t += step_size;
+                current_pos += ray_dir * step_size;
+                in_brick = glm::all(glm::greaterThanEqual(current_pos, Vec3{})) && glm::all(glm::lessThanEqual(current_pos, Vec3{1}));
+            }
+        }
+        return RayHit{ .color = acc };
     }
 }
 
