@@ -2,6 +2,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+#include "svo.h"
+
 using u8Vec4 = glm::u8vec4;
 
 struct ImageBuffer {
@@ -56,24 +58,44 @@ int main() {
     Vec3 triangle_pos[3] = { {-2.5, -2, 1.5f}, {3.5, 2.f, 1.25f}, { -3.5f, 2.5f, 1.f } };
     Vec3 triangle_col[3] = { { 1, 0, 0 }, {0, 1, 0}, {0, 0, 1} };
 
+    BrickPayload<4, BrickLayout::Linear> brick;
+    brick.init();
+    brick.set_voxel_color({0, 0, 0}, Vec4{1, 0, 0, 1});
+    brick.set_voxel_color({1, 1, 1}, Vec4{0, 1, 0, 1});
+    brick.set_voxel_color({2, 2, 2}, Vec4{0, 0, 1, 1});
+    brick.set_voxel_color({3, 3, 3}, Vec4{1, 1, 1, 1});
+
     for(i32 y=0; y<resolution.y; y++) {
         for(i32 x=0; x<resolution.x; x++) {
             const Vec2 clip_space = ((Vec2{x, y} + 0.5f) / Vec2{ resolution }) * Vec2{-2, 2} + Vec2{1, -1};
             
             Vec4 view_camera_ray_homog = Vec4{clip_space, 1, 1} * inv_projection_mat;
-            Vec3 view_camera_ray = glm::normalize(Vec3{view_camera_ray_homog / view_camera_ray_homog.w});
+            // todo: wtf is this negative
+            Vec3 view_camera_ray = -glm::normalize(Vec3{view_camera_ray_homog / view_camera_ray_homog.w});
+
 
             Vec3 world_camera_ray = view_camera_ray * Mat3{inv_view_mat};
 
+#if 0
             Vec2 barycentric;
             f32 t;
-            if(glm::intersectRayTriangle(camera_eye, world_camera_ray, triangle_pos[0], triangle_pos[1], triangle_pos[2], barycentric, t)) {
-                Vec3 col = (1-barycentric.x - barycentric.y) * triangle_col[0] + barycentric.x * triangle_col[1] + barycentric.y * triangle_col[2];
+            if (glm::intersectRayTriangle(camera_eye, world_camera_ray, triangle_pos[0], triangle_pos[1], triangle_pos[2], barycentric, t))
+            {
+                Vec3 col = (1 - barycentric.x - barycentric.y) * triangle_col[0] + barycentric.x * triangle_col[1] + barycentric.y * triangle_col[2];
                 image_buffer.store_color({x, y}, Vec4{col, 1});
+            }
+            else
+            {
+                image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
+            }
+#else
+            if(auto result = Brick::trace_ray(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
+                image_buffer.store_color({x, y}, result->color);
             }
             else {
                 image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
             }
+#endif
         }
     }
 

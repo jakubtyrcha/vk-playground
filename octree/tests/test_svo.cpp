@@ -377,7 +377,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 0};
             Vec3 dir = Vec3{0, 0, 1};
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 4.f));
         }
@@ -385,7 +385,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 0};
             Vec3 dir = glm::normalize(Vec3{0.000001, 0.000001, 1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 4.f));
         }
@@ -393,7 +393,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 0};
             Vec3 dir = glm::normalize(Vec3{-0.000001, 0.000001, 1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 4.f));
         }
@@ -401,7 +401,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 0};
             Vec3 dir = glm::normalize(Vec3{-0.000001, -0.000001, 1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 4.f));
         }
@@ -409,7 +409,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 1};
             Vec3 dir = Vec3{0, 0, -1};
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 2.f));
         }
@@ -417,7 +417,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 1};
             Vec3 dir = glm::normalize(Vec3{0.000001, 0.000001, -1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 2.f));
         }
@@ -425,7 +425,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 1};
             Vec3 dir = glm::normalize(Vec3{-0.000001, 0.000001, -1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 2.f));
         }
@@ -433,7 +433,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 1};
             Vec3 dir = glm::normalize(Vec3{0.000001, -0.000001, -1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 2.f));
         }
@@ -441,7 +441,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.3, 0.3, 1};
             Vec3 dir = glm::normalize(Vec3{-0.000001, -0.000001, -1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(1.f / 2.f));
         }
@@ -449,7 +449,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{1, 0.3f, 1};
             Vec3 dir = glm::normalize(Vec3{-1, 0, -1});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(sqrtf(2 * square(0.5f))));
         }
@@ -457,14 +457,14 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{1, 0.3f, 1};
             Vec3 dir = glm::normalize(Vec3{-1, 0, 0});
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(!result);
         }
         {
             Vec3 origin = Vec3{0.3, 0.3, -2};
             Vec3 dir = Vec3{0, 0, 1};
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(2.f + 1.f / 4.f));
         }
@@ -480,7 +480,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.2f, 0.2f, 1};
             Vec3 dir = Vec3{0, 0, -1};
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(0.75f));
         }
@@ -489,7 +489,7 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
             Vec3 origin = Vec3{0.9f, 0.9f, 0};
             Vec3 dir = Vec3{0, 0, 1};
             Vec3 inv_dir = 1.f / dir;
-            auto result = decltype(brick)::trace_ray(brick, origin, dir, inv_dir);
+            auto result = Brick::trace_ray(brick, origin, dir, inv_dir);
             REQUIRE(result);
             REQUIRE(result->t == Approx(0.75f));
         }

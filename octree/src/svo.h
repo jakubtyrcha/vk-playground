@@ -105,22 +105,27 @@ struct BrickPayload {
         return c0 + c1 * delta.x + c2 * delta.y + c3 * delta.z + c4 * delta.x * delta.y
             + c5 * delta.y * delta.z + c6 * delta.z * delta.x + c7 * delta.x * delta.y * delta.z;
     }
+};
 
+constexpr f32 TRACE_EPS = 0.000001f;
+
+namespace Brick {
     struct RayHit {
         Vec4 color;
         f32 t;
     };
 
+    template<typename BrickT>
     // trace in normalised brick space [0..1]
     // each voxel is considered uniform in color (no interpolation)
     static std::optional<RayHit> trace_ray_start_in_brick(
-        BrickPayload const & brick,
+        BrickT const & brick,
         Vec3 const & ray_origin,
         Vec3 const & inv_ray_dir
     ) 
     {
-        static constexpr f32 inv_brick_size = 1.f / BRICK_SIZE;
-        Vec3i voxel = glm::min(Vec3i{ray_origin * Vec3{BRICK_SIZE}}, Vec3i{BRICK_SIZE - 1});
+        static constexpr f32 inv_brick_size = 1.f / BrickT::Size;
+        Vec3i voxel = glm::min(Vec3i{ray_origin * Vec3{BrickT::Size}}, Vec3i{BrickT::Size - 1});
         const Vec3i step = glm::sign(inv_ray_dir);
         f32 current_t = 0;
 
@@ -139,7 +144,7 @@ struct BrickPayload {
 
             voxel += step * Vec3i{glm::equal(t3, Vec3{current_t})};
 
-            if(voxel != glm::clamp(voxel, {}, {BRICK_SIZE - 1})) {
+            if(voxel != glm::clamp(voxel, {}, {BrickT::Size - 1})) {
                 break;
             }
         }
@@ -148,23 +153,30 @@ struct BrickPayload {
     }
 
     // trace in normalised brick space [0..1]
+    template<typename BrickT>
     static std::optional<RayHit> trace_ray(
-        BrickPayload const & brick,
+        BrickT const & brick,
         Vec3 ray_origin,
         Vec3 const & ray_dir,
         Vec3 const & inv_ray_dir
     )
     {
-        // find t till hit the front plane
-        Vec3 enter_planes = glm::lessThan(inv_ray_dir, Vec3{0});
-        Vec3 t3 = ((enter_planes - ray_origin) * inv_ray_dir);
-        // for rays parallel to an axis, we might have a negative inf
-        t3 = glm::abs(t3);
-        f32 min_t = glm::fmin(t3.x, t3.y, t3.z);
-        f32 t = glm::max(0.f, min_t);
-        if(t > 0) {
-            // move rayo to t, start trace in brick
-            ray_origin += t * ray_dir;
+        f32 t = 0.f;
+        if(glm::any(glm::lessThan(ray_origin, Vec3{})) || glm::any(glm::greaterThan(ray_origin, Vec3{1}))) {
+            // find t till hit the front plane
+            Vec3 enter_planes = glm::lessThan(inv_ray_dir, Vec3{0});
+            Vec3 t3 = ((enter_planes - ray_origin) * inv_ray_dir);
+            f32 max_t = glm::fmax(t3.x, t3.y, t3.z);
+            t = glm::max(0.f, max_t + TRACE_EPS);
+            if(t > 0) {
+                // move rayo to t, start trace in the brick
+                ray_origin += t * ray_dir;
+            }
+
+            // if not in the brick - return immediatelly 
+            if(glm::any(glm::lessThan(ray_origin, Vec3{})) || glm::any(glm::greaterThan(ray_origin, Vec3{1}))) {
+                return std::nullopt;
+            }   
         }
 
         auto hit = trace_ray_start_in_brick(brick, ray_origin, inv_ray_dir);
@@ -174,7 +186,7 @@ struct BrickPayload {
         }
         return std::nullopt;
     }
-};
+}
 
 template<i32 BRICK_SIZE, BrickVoxelPosition BRICK_VOXEL_POS, BrickLayout BRICK_LAYOUT = BrickLayout::Linear>
 struct SvoPool {
