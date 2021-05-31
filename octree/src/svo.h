@@ -107,9 +107,9 @@ struct BrickPayload {
     }
 };
 
-constexpr f32 TRACE_EPS = 0.000001f;
+namespace Tracing {
+    constexpr f32 TRACE_EPS = 0.000001f;
 
-namespace Brick {
     struct RayHit {
         Vec4 color;
         f32 t;
@@ -117,8 +117,9 @@ namespace Brick {
 
     template<typename BrickT>
     // trace in normalised brick space [0..1]
+    // 0 and 1 are on voxel corners
     // each voxel is considered uniform in color (no interpolation)
-    std::optional<RayHit> trace_ray_start_in_brick(
+    std::optional<RayHit> trace_brick_ray_starting_within(
         BrickT const & brick,
         Vec3 const & ray_origin,
         Vec3 const & inv_ray_dir
@@ -154,7 +155,7 @@ namespace Brick {
 
     // trace in normalised brick space [0..1]
     template<typename BrickT>
-    std::optional<RayHit> trace_ray(
+    std::optional<RayHit> trace_brick_ray(
         BrickT const & brick,
         Vec3 ray_origin,
         Vec3 const & ray_dir,
@@ -179,7 +180,7 @@ namespace Brick {
             }   
         }
 
-        auto hit = trace_ray_start_in_brick(brick, ray_origin, inv_ray_dir);
+        auto hit = trace_brick_ray_starting_within(brick, ray_origin, inv_ray_dir);
         if(hit) {
             hit->t += t;
             return hit;
@@ -292,6 +293,8 @@ struct SvoPool {
 
 template<typename TPool>
 struct Svo {
+    using PoolType = TPool;
+
     TPool & pool_;
     const Obb obb_;
     const i32 root_node_;
@@ -394,6 +397,20 @@ struct Svo {
         }
     }
 
+    Vec3 get_leaf_node_voxel_wposition(Vec3i coord) const {
+        const f32 voxel_size = get_voxel_world_size();
+        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+            //return Vec3{coord} * Vec3{voxel__size} + obb_.half_extent;
+        }
+        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+            return Vec3{coord} * Vec3{voxel_size}; //? + obb_.half_extent;
+        }
+    }
+
+    void set_color_at_leaf_node_voxel(Vec3i coord, Vec4 color) {
+        store_voxel_level(coord, max_depth_, color);
+    }
+
     void set_color_at_location(Vec3 location, Vec4 color) {
         Vec3 local_normalised_position = get_local_normalised_position(location);
 
@@ -446,7 +463,7 @@ struct Svo {
         OctreeNode &node = pool_.get_node(address);
         node.max_subdivision = 0;
         //node.data_type_flag = OctreeNode::DATA_CONSTANT_COLOR;
-        //node.data_type_flag = OctreeNode::DATA_BRICK_ADDRESS;
+        node.data_type_flag = OctreeNode::DATA_BRICK_ADDRESS;
         node.address = 0;
         // node.r = 0;
         // node.g = 0;
@@ -791,11 +808,82 @@ struct Svo {
     }
 };
 
-struct TraceResult
+
+namespace Tracing
 {
-    Vec4 color;
-    f32 t;
-};
+    template<typename TSvo>
+    std::optional<RayHit> trace_svo_ray_starting_within(
+        TSvo const & svo, 
+        Ray const & ray
+        ) 
+    {
+        using SVOTYPE = TSvo;
+
+        // ray has to be in 0..1 space
+        const Vec3 inv_ray_dir = Vec3{1.f} / ray.direction;
+        const i32 max_depth = svo.max_depth_;
+        const f32 leaf_node_size = 1.f / (1 << max_depth);
+
+        // todo: min because of 1.0
+        Vec3i current_leaf_node_icoord = ray.origin / Vec3{leaf_node_size};
+        // init with the root
+        int current_depth = 0;
+        const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
+        Vec3i current_node_icoord{0};
+        const Vec3i step = glm::sign(ray.direction);
+
+        while(true) {
+            //not supported yet
+            assert(current_node->data_type_flag != OctreeNode::DATA_CONSTANT_COLOR);
+            i32 children_address = current_node->address;
+            const i32 width_in_leaf_nodes = 1 << (max_depth - current_depth);
+
+            // subdivide if possible
+            if(current_depth < max_depth && children_address) {
+                const Vec3i current_node_mid = current_node_icoord * width_in_leaf_nodes + width_in_leaf_nodes / 2;
+                auto vec_ge_mid = glm::greaterThanEqual(current_leaf_node_icoord, current_node_mid);
+
+                i32 child_index = vec_ge_mid.x + vec_ge_mid.y * 2 + vec_ge_mid.z * 4;
+
+                current_node = &svo.pool_.get_node(children_address + child_index);
+                current_node_icoord = current_node_icoord * 2 + Vec3i{vec_ge_mid};
+                current_depth++;
+                continue;
+            }
+
+            // couldn't subdivide, do I have a brick
+            if(current_node->brick_address) {
+                // raymarch the brick, return on hit
+                // convert to the brick coord
+                // this depends on the brick voxel coords!
+
+                // find coord in node space
+
+                const f32 node_nsize = 1.f / (1 << current_depth);
+                const Vec3 node_ncoord = (ray.origin - Vec3{current_node_icoord} * Vec3{node_nsize}) / Vec3{node_nsize};
+
+                Vec3 brick_coord;
+
+                if constexpr(TSvo::PoolType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+                    brick_coord = node_ncoord * Vec3{(TSvo::PoolType::BRICK_SIZE - 2) / (f32)TSvo::PoolType::BRICK_SIZE};
+                }
+                else if(TSvo::PoolType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+                    brick_coord = node_ncoord;
+                }
+                auto brick_trace = trace_brick_ray_starting_within(svo.pool_.get_brick(current_node->brick_address), brick_coord, inv_ray_dir);
+                if(brick_trace) {
+                    // todo: adjust the ray to svo coords
+                    return brick_trace;
+                }
+            }
+
+            // todo: move the ray
+            return std::nullopt;    
+        }
+
+        return std::nullopt;
+    }
+}
 
 /*
 test scenarios:

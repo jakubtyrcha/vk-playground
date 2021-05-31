@@ -42,8 +42,8 @@ struct ImageBuffer {
 
 int main() {
     Vec2i resolution{800, 600};
-    Vec3 camera_eye{0, 0, -3};
-    Vec3 camera_dir{0, 0, 1};
+    Vec3 camera_eye{1, 0, -1};
+    Vec3 camera_dir = glm::normalize(Vec3{0, 0, 1});
     Vec3 camera_up{0, 1, 0};
     f32 camera_fov_y = glm::half_pi<f32>();
 
@@ -61,16 +61,16 @@ int main() {
     BrickPayload<4, BrickLayout::Linear> brick;
     brick.init();
 
-    for (i32 i = 0; i < 4; i++)
-    {
-        for (i32 j = 0; j < 4; j++)
-        {
-            for (i32 k = 0; k < 4; k++)
-            {
-                brick.set_voxel_color({i, j, k}, Vec4{0.01f, 0.01f, 0.01f, 0.01f});
-            }
-        }
-    }
+    // for (i32 i = 0; i < 4; i++)
+    // {
+    //     for (i32 j = 0; j < 4; j++)
+    //     {
+    //         for (i32 k = 0; k < 4; k++)
+    //         {
+    //             brick.set_voxel_color({i, j, k}, Vec4{0.01f, 0.01f, 0.01f, 0.01f});
+    //         }
+    //     }
+    // }
 
     brick.set_voxel_color({0, 0, 0}, Vec4{1, 0, 0, 1});
     brick.set_voxel_color({1, 1, 1}, Vec4{0, 1, 0, 1});
@@ -79,12 +79,12 @@ int main() {
 
     for(i32 y=0; y<resolution.y; y++) {
         for(i32 x=0; x<resolution.x; x++) {
-            const Vec2 clip_space = ((Vec2{x, y} + 0.5f) / Vec2{ resolution }) * Vec2{-2, 2} + Vec2{1, -1};
+            const Vec2 clip_space = ((Vec2{x, y} + 0.5f) / Vec2{ resolution }) * Vec2{2, -2} + Vec2{-1, 1};
             
             Vec4 view_camera_ray_homog = Vec4{clip_space, 1, 1} * inv_projection_mat;
             // todo: wtf is this negative
-            Vec3 view_camera_ray = -glm::normalize(Vec3{view_camera_ray_homog / view_camera_ray_homog.w});
-
+            Vec3 view_camera_ray = glm::normalize(Vec3{view_camera_ray_homog / view_camera_ray_homog.w});
+            view_camera_ray.z = -view_camera_ray.z;
 
             Vec3 world_camera_ray = view_camera_ray * Mat3{inv_view_mat};
 
@@ -101,8 +101,8 @@ int main() {
                 image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
             }
 #else
-            //if(auto result = Brick::trace_ray(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
-            if(auto result = Brick::raymarch_volume(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
+            if(auto result = Tracing::trace_brick_ray(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
+            // if(auto result = Brick::raymarch_volume(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
                 image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
             }
             else {
