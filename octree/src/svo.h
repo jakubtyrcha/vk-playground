@@ -820,12 +820,13 @@ namespace Tracing
         using SVOTYPE = TSvo;
 
         // ray has to be in 0..1 space
+        Vec3 current_ray_origin = ray.origin;
         const Vec3 inv_ray_dir = Vec3{1.f} / ray.direction;
         const i32 max_depth = svo.max_depth_;
         const f32 leaf_node_size = 1.f / (1 << max_depth);
 
         // todo: min because of 1.0
-        Vec3i current_leaf_node_icoord = ray.origin / Vec3{leaf_node_size};
+        Vec3i current_leaf_node_icoord = current_ray_origin / Vec3{leaf_node_size};
         // init with the root
         int current_depth = 0;
         const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
@@ -860,7 +861,7 @@ namespace Tracing
                 // find coord in node space
 
                 const f32 node_nsize = 1.f / (1 << current_depth);
-                const Vec3 node_ncoord = (ray.origin - Vec3{current_node_icoord} * Vec3{node_nsize}) / Vec3{node_nsize};
+                const Vec3 node_ncoord = (current_ray_origin - Vec3{current_node_icoord} * Vec3{node_nsize}) / Vec3{node_nsize};
 
                 Vec3 brick_coord;
 
@@ -878,97 +879,65 @@ namespace Tracing
             }
 
             // todo: move the ray
-            return std::nullopt;    
+            const f32 node_nsize = 1.f / (1 << current_depth);
+            Vec3 exit_planes = Vec3(current_node_icoord + Vec3i{glm::greaterThan(inv_ray_dir, Vec3{0})}) * Vec3{node_nsize};
+            Vec3 t3 = ((exit_planes - current_ray_origin) * inv_ray_dir);
+            // for rays parallel to an axis, we might have a negative inf
+            t3 = glm::abs(t3);
+            f32 current_t = glm::fmin(t3.x, t3.y, t3.z);
+            current_ray_origin = ray.origin + (current_t + TRACE_EPS) * ray.direction;
+
+            current_leaf_node_icoord += Vec3i{1 << (max_depth - current_depth)} * step * Vec3i{glm::equal(t3, Vec3{current_t})};
+
+            // is inside of the tree
+            if(current_leaf_node_icoord != glm::clamp(current_leaf_node_icoord, {}, {(1 << max_depth) - 1})) {
+                break;
+            }
+
+            // update the current node
+
+            // restart!
+            current_depth = 0;
+            current_node = &svo.pool_.get_node(svo.root_node_);
+            current_node_icoord = {0};
         }
 
         return std::nullopt;
     }
+
+    template<typename TSvo>
+    std::optional<RayHit> trace_svo_ray(
+        TSvo const & svo, 
+        Ray const & ray
+        ) 
+    {
+        using SVOTYPE = TSvo;
+        const Vec3 inv_ray_dir = Vec3{1.f} / ray.direction;
+        Ray svo_ray = ray;
+
+        f32 t = 0.f;
+        if(glm::any(glm::lessThan(ray.origin, Vec3{})) || glm::any(glm::greaterThan(ray.origin, Vec3{1}))) {
+            // find t till hit the front plane
+            Vec3 enter_planes = glm::lessThan(inv_ray_dir, Vec3{0});
+            Vec3 t3 = ((enter_planes - ray.origin) * inv_ray_dir);
+            f32 max_t = glm::fmax(t3.x, t3.y, t3.z);
+            t = glm::max(0.f, max_t + TRACE_EPS);
+            if(t > 0) {
+                // move rayo to t, start trace in the brick
+                svo_ray.origin += t * ray.direction;
+            }
+
+            // if not in the volume - return immediatelly 
+            if(glm::any(glm::lessThan(svo_ray.origin, Vec3{})) || glm::any(glm::greaterThan(svo_ray.origin, Vec3{1}))) {
+                return std::nullopt;
+            }   
+        }
+
+        auto hit = trace_svo_ray_starting_within(svo, svo_ray);
+        if(hit) {
+            hit->t += t;
+            return hit;
+        }
+        return std::nullopt;
+    }
 }
-
-/*
-test scenarios:
-*) non-aabb obb
-*) 
-*/
-
-// constexpr f32 k_traverse_eps = 0.00000001f;
-
-// template<typename TSvo>
-// std::optional<TraceResult> trace_ray(TSvo const & svo, Ray const &ray) 
-// {
-//     // convert ray to local position
-//     Ray local_ray = svo.obb_.to_local(ray);
-//     Vec3 inv_local_ray_dir = Vec3{1.f} / local_ray.dir;
-//     Vec3 half_extent = svo.obb_.half_extent;
-
-//     Vec3 enter_local_vt = (local_ray.origin - Vec3{-half_extent}) * inv_local_ray_dir;
-//     f32 enter_local_t = glm::max(enter_local_vt.x, enter_local_vt.y, enter_local_vt.z);
-//     Vec3 exit_local_vt = (local_ray.origin - Vec3{half_extent}) * inv_local_ray_dir;
-//     f32 exit_local_t = glm::min(exit_local_vt.x, exit_local_vt.y, exit_local_vt.z);
-
-//     if(exit_local_t < 0.f) {
-//         return std::nullopt;
-//     }
-
-//     const f32 voxel_wsize = get_voxel_world_size();
-
-//     local_ray.origin += glm::min(enter_local_t + k_traverse_eps, 0.f) * local_ray.direction;
-//     // find the target node of the current position
-//     Vec3i voxel_coord = (local_ray.origin - half_extent) / get_voxel_world_size();
-
-//     const i32 max_depth = svo.max_depth_;
-//     f32 current_t = enter_local_t > 0 ? 0 : enter_local_t;
-//     Vec3 current_origin = local_ray.origin + current_t * local_ray.direction;
-//     int current_depth = 0;
-//     const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
-//     Vec3i current_node_coord{0};
-//     Vec3i step = glm::sign(local_ray.direction);
-    
-//     while(true) {
-//         //not supported yet
-//         assert(current_node.data_type_flag != OctreeNode::DATA_CONSTANT_COLOR);
-//         i32 children_address = current_node->address;
-//         const i32 width_in_max_depth_nodes = 1 << (max_depth - current_depth);
-
-//         // subdivide if possible
-//         if(current_depth < max_depth && children_address) {
-//             const Vec3i current_node_mid = current_node_coord * width_in_max_depth_nodes + width_in_max_depth_nodes / 2;
-//             auto vec_ge_mid = glm::greaterThanEqual(voxel_coord, current_node_mid);
-            
-//             i32 child_index = vec_ge_mid.x + vec_ge_mid.y * 2 + vec_ge_mid.z * 4;
-
-//             current_node = &svo.pool_.get_node(children_address + child_index);
-//             current_node_coord = current_node_coord * 2 + Vec3i{vec_ge_mid};
-//             current_depth++;
-//             continue;
-//         }
-
-//         // couldn't subdivide, do I have a brick
-//         if(current_node->brick_address) {
-//             // raymarch the brick, return on hit
-//         }
-
-//         // time to move to the end of the cell
-//         // find the id of the neighbour on the same level
-
-//         // TODO: domain
-//         Vec3 exit_planes = (current_node_coord + step) * width_in_max_depth_nodes;
-//         exit_planes *= voxel_wsize;
-
-//         Vec3 t_3 = (local_ray.origin - exit_planes) * inv_local_ray_dir;
-//         current_t = std::min(t_3.x, t_3.y, t_3.z);
-//         current_position = local_ray.origin + current_t * local_ray.direction;
-
-//         Vec3i neighbour_node_id = current_node_coord + glm::equals(t_3, current_t) * step;
-//         // find common ancestor, update current_node to the common ancestor
-//         // Vec3i common_ancestor = glm::highestBitValue(neighbour_node_id & current_node_id);
-//         i32 how_many_steps_to_common_ancestor;
-//         current_node_coord << how_many_steps_to_common_ancestor; // 
-//         // update current node from stack
-
-//         // do stuff to
-
-//     }
-
-//     return std::nullopt;
-// }

@@ -77,6 +77,15 @@ int main() {
     brick.set_voxel_color({2, 2, 2}, Vec4{0, 0, 1, 1});
     brick.set_voxel_color({3, 3, 3}, Vec4{1, 1, 1, 1});
 
+    SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
+    pool.reset(10000, 10000);
+
+    Obb volume{ .center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f} };
+    i32 max_depth = 2;
+    Svo svo{pool, volume, max_depth};
+
+    svo.set_color_at_leaf_node_voxel({}, Vec4{1, 1, 1, 1});
+
     for(i32 y=0; y<resolution.y; y++) {
         for(i32 x=0; x<resolution.x; x++) {
             const Vec2 clip_space = ((Vec2{x, y} + 0.5f) / Vec2{ resolution }) * Vec2{2, -2} + Vec2{-1, 1};
@@ -100,8 +109,17 @@ int main() {
             {
                 image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
             }
-#else
+#elif 0
             if(auto result = Tracing::trace_brick_ray(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
+            // if(auto result = Brick::raymarch_volume(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
+                image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
+            }
+            else {
+                image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
+            }
+#else 
+            Ray ray{.origin = camera_eye, .direction = world_camera_ray};
+            if(auto result = Tracing::trace_svo_ray(svo, ray); result) {
             // if(auto result = Brick::raymarch_volume(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
                 image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
             }
