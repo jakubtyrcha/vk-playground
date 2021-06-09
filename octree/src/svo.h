@@ -820,19 +820,19 @@ namespace Tracing
         using SVOTYPE = TSvo;
 
         // ray has to be in 0..1 space
-        Vec3 current_ray_origin = ray.origin;
         const Vec3 inv_ray_dir = Vec3{1.f} / ray.direction;
         const i32 max_depth = svo.max_depth_;
         const f32 leaf_node_size = 1.f / (1 << max_depth);
 
         // todo: min because of 1.0
-        Vec3i current_leaf_node_icoord = current_ray_origin / Vec3{leaf_node_size};
+        Vec3i current_leaf_node_icoord = ray.origin / Vec3{leaf_node_size};
         // init with the root
         int current_depth = 0;
         const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
         Vec3i current_node_icoord{0};
         const Vec3i step = glm::sign(ray.direction);
 
+        Vec3 current_sample_position = ray.origin;
         while(true) {
             //not supported yet
             assert(current_node->data_type_flag != OctreeNode::DATA_CONSTANT_COLOR);
@@ -861,7 +861,7 @@ namespace Tracing
                 // find coord in node space
 
                 const f32 node_nsize = 1.f / (1 << current_depth);
-                const Vec3 node_ncoord = (current_ray_origin - Vec3{current_node_icoord} * Vec3{node_nsize}) / Vec3{node_nsize};
+                const Vec3 node_ncoord = (current_sample_position - Vec3{current_node_icoord} * Vec3{node_nsize}) / Vec3{node_nsize};
 
                 Vec3 brick_coord;
 
@@ -881,11 +881,11 @@ namespace Tracing
             // todo: move the ray
             const f32 node_nsize = 1.f / (1 << current_depth);
             Vec3 exit_planes = Vec3(current_node_icoord + Vec3i{glm::greaterThan(inv_ray_dir, Vec3{0})}) * Vec3{node_nsize};
-            Vec3 t3 = ((exit_planes - current_ray_origin) * inv_ray_dir);
+            Vec3 t3 = ((exit_planes - ray.origin) * inv_ray_dir);
             // for rays parallel to an axis, we might have a negative inf
             t3 = glm::abs(t3);
             f32 current_t = glm::fmin(t3.x, t3.y, t3.z);
-            current_ray_origin = ray.origin + (current_t + TRACE_EPS) * ray.direction;
+            current_sample_position = ray.origin + (current_t + TRACE_EPS) * ray.direction;
 
             current_leaf_node_icoord += Vec3i{1 << (max_depth - current_depth)} * step * Vec3i{glm::equal(t3, Vec3{current_t})};
 

@@ -52,7 +52,7 @@ TEMPLATE_TEST_CASE( "Can fill brick texels and do a bilinear sample", "[svo][tem
 TEST_CASE( "Can find the child index", "[svo]" ) {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(1, 1);
-    Obb volume{.center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1}};
+    Obb volume{.center = {}, .orientation = Mat3{1}, .half_extent = Vec3{1}};
     Svo svo{pool, volume, 1};
     {
         Vec3i begin{0};
@@ -93,7 +93,7 @@ TEMPLATE_TEST_CASE( "Can sample at the edges", "[svo][template]",
     TestType pool;
     pool.reset(10000, 10000);
 
-    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    Obb volume{ .center = {}, .orientation = Mat3{1}, .half_extent = Vec3{1} };
     i32 max_depth = 1;
     Svo svo{pool, volume, max_depth};
 
@@ -123,7 +123,7 @@ TEST_CASE( "Can store and sample from voxel-at-node-corner brick octree", "[svo]
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(10000, 10000);
 
-    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    Obb volume{ .center = {}, .orientation = Mat3{1}, .half_extent = Vec3{1} };
     i32 max_depth = 1;
     Svo svo{pool, volume, max_depth};
 
@@ -195,7 +195,7 @@ TEST_CASE( "Can store and sample from voxel-at-node-center brick octree", "[svo]
     SvoPool<4, BrickVoxelPosition::NodeCenter> pool;
     pool.reset(10000, 10000);
 
-    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    Obb volume{ .center = {}, .orientation = Mat3{1}, .half_extent = Vec3{1} };
     i32 max_depth = 1;
     Svo svo{pool, volume, max_depth};
 
@@ -287,7 +287,7 @@ TEMPLATE_TEST_CASE( "Can interpolate gradients", "[svo][template]",
     TestType pool;
     pool.reset(10000, 10000);
 
-    Obb volume{ .center = {}, .orientation = Mat3x3{1}, .half_extent = Vec3{1} };
+    Obb volume{ .center = {}, .orientation = Mat3{1}, .half_extent = Vec3{1} };
     i32 max_depth = 2;
     Svo svo{pool, volume, max_depth};
     const f32 voxel_size = svo.get_voxel_world_size();
@@ -521,12 +521,13 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
 TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
 {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
-    pool.reset(10000, 10000);
-
-    Obb volume{ .center = Vec3{0.5f}, .orientation = Mat3x3{1}, .half_extent = Vec3{0.5f} };
-    i32 max_depth = 2;
-    Svo svo{pool, volume, max_depth};
+    SECTION("Trace a voxel at the edge")
     {
+        pool.reset(10000, 10000);
+        Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
+        i32 max_depth = 2;
+        Svo svo{pool, volume, max_depth};
+
         // fill voxel and trace a ray through the same location
         svo.set_color_at_location(Vec3{0, 0, 0}, Vec4{1, 1, 1, 1});
 
@@ -543,7 +544,14 @@ TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
             REQUIRE(!maybe_hit);
         }
     }
+
+    SECTION("Trace through multiple nodes")
     {
+        pool.reset(10000, 10000);
+        Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
+        i32 max_depth = 2;
+        Svo svo{pool, volume, max_depth};
+
         const auto voxel = Vec3i{7, 3, 12};
 
         // fill voxel and trace a ray through the same location
@@ -569,5 +577,21 @@ TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
             auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
             REQUIRE(maybe_hit);
         }
+    }
+
+    SECTION("Trace from outside of the brick")
+    {
+        pool.reset(10000, 10000);
+
+        Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
+        i32 max_depth = 2;
+        Svo svo{pool, volume, max_depth};
+
+        svo.set_color_at_leaf_node_voxel({}, Vec4{1, 1, 1, 1});
+
+        auto maybe_hit = Tracing::trace_svo_ray(svo, {
+            .origin = {1, 0, -1}, 
+            .direction = Vec3{-0.345923901, 0.519543409, 0.781288147}});
+        REQUIRE(!maybe_hit);
     }
 }

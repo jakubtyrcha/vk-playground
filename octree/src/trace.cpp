@@ -3,6 +3,8 @@
 #include <stb_image_write.h>
 
 #include "svo.h"
+#include <filesystem>
+#include <fmt/core.h>
 
 using u8Vec4 = glm::u8vec4;
 
@@ -84,7 +86,16 @@ int main() {
     i32 max_depth = 2;
     Svo svo{pool, volume, max_depth};
 
-    svo.set_color_at_leaf_node_voxel({}, Vec4{1, 1, 1, 1});
+    //svo.set_color_at_leaf_node_voxel({}, Vec4{1, 1, 1, 1});
+
+    f32 step = svo.get_voxel_world_size();
+    for(f32 x=0.25f; x<=0.75f; x+=step) {
+        for(f32 y=0.25f; y<=0.75f; y+=step) {
+            for(f32 z=0.25f; z<=0.75f; z+=step) {
+                svo.set_color_at_location({x, y, z}, {x, y, z, 1.f});
+            }
+        }
+    }
 
     for(i32 y=0; y<resolution.y; y++) {
         for(i32 x=0; x<resolution.x; x++) {
@@ -120,7 +131,6 @@ int main() {
 #else 
             Ray ray{.origin = camera_eye, .direction = world_camera_ray};
             if(auto result = Tracing::trace_svo_ray(svo, ray); result) {
-            // if(auto result = Brick::raymarch_volume(brick, camera_eye, world_camera_ray, 1.f / world_camera_ray); result) {
                 image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
             }
             else {
@@ -131,6 +141,7 @@ int main() {
     }
 
     image_buffer.save_to_file("image.png");
+    fmt::print("file saved to {}", std::filesystem::current_path().string());
 
     return 0;
 }
