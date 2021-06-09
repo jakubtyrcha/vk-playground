@@ -533,15 +533,15 @@ TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
         svo.build_tree();
 
         {
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = Vec3{.0001f}, .direction = Vec3{1, 0, 0}});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{.0001f}, .direction = Vec3{1, 0, 0}});
             REQUIRE(maybe_hit);
         }
         {
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = Vec3{1, 1, 1}, .direction = glm::normalize(Vec3{-1, -1, -1})});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{1, 1, 1}, .direction = glm::normalize(Vec3{-1, -1, -1})});
             REQUIRE(maybe_hit);
         }
         {
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = Vec3{1, 1, 0.5}, .direction = glm::normalize(Vec3{-1, -1, -1})});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{1, 1, 0.5}, .direction = glm::normalize(Vec3{-1, -1, -1})});
             REQUIRE(!maybe_hit);
         }
     }
@@ -561,22 +561,22 @@ TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
 
         {
             Vec3 sample_location = svo.get_leaf_node_voxel_wposition(voxel);
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{1, 0, 0}});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{1, 0, 0}});
             REQUIRE(maybe_hit);
         }
         {
             Vec3 sample_location = svo.get_leaf_node_voxel_wposition(Vec3i{7, 3, 11});
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
             REQUIRE(maybe_hit);
         }
         {
             Vec3 sample_location = svo.get_leaf_node_voxel_wposition(Vec3i{7, 3, 10});
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
             REQUIRE(maybe_hit);
         }
         {
             Vec3 sample_location = svo.get_leaf_node_voxel_wposition(Vec3i{7, 3, 8});
-            auto maybe_hit = Tracing::trace_svo_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
             REQUIRE(maybe_hit);
         }
     }

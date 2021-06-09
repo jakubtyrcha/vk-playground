@@ -812,7 +812,7 @@ struct Svo {
 namespace Tracing
 {
     template<typename TSvo>
-    std::optional<RayHit> trace_svo_ray_starting_within(
+    std::optional<RayHit> trace_svo_local_ray_starting_within(
         TSvo const & svo, 
         Ray const & ray
         ) 
@@ -912,8 +912,10 @@ namespace Tracing
         ) 
     {
         using SVOTYPE = TSvo;
-        const Vec3 inv_ray_dir = Vec3{1.f} / ray.direction;
-        Ray svo_ray = ray;
+        Ray obb_ray = svo.obb_.to_local(ray);
+        // convert to [0..1]
+        obb_ray.origin = obb_ray.origin / svo.obb_.half_extent + Vec3{0.5f};
+        const Vec3 inv_ray_dir = Vec3{1.f} / obb_ray.direction;
 
         f32 t = 0.f;
         if(glm::any(glm::lessThan(ray.origin, Vec3{})) || glm::any(glm::greaterThan(ray.origin, Vec3{1}))) {
@@ -924,16 +926,16 @@ namespace Tracing
             t = glm::max(0.f, max_t + TRACE_EPS);
             if(t > 0) {
                 // move rayo to t, start trace in the brick
-                svo_ray.origin += t * ray.direction;
+                obb_ray.origin += t * ray.direction;
             }
 
             // if not in the volume - return immediatelly 
-            if(glm::any(glm::lessThan(svo_ray.origin, Vec3{})) || glm::any(glm::greaterThan(svo_ray.origin, Vec3{1}))) {
+            if(glm::any(glm::lessThan(obb_ray.origin, Vec3{})) || glm::any(glm::greaterThan(obb_ray.origin, Vec3{1}))) {
                 return std::nullopt;
             }   
         }
 
-        auto hit = trace_svo_ray_starting_within(svo, svo_ray);
+        auto hit = trace_svo_local_ray_starting_within(svo, obb_ray);
         if(hit) {
             hit->t += t;
             return hit;

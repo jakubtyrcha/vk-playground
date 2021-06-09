@@ -63,16 +63,20 @@ int main() {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
     pool.reset(10000, 10000);
 
-    Obb volume{ .center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f} };
+    Obb volume{ .center = Vec3{}, .orientation = Mat3{1}, .half_extent = Vec3{1.f} };
     i32 max_depth = 3;
     Svo svo{pool, volume, max_depth};
 
     f32 step = svo.get_voxel_world_size();
-    for(f32 x=0.25f; x<=0.75f; x+=step) {
-        for(f32 y=0.25f; y<=0.75f; y+=step) {
-            for(f32 z=0.25f; z<=0.75f; z+=step) {
-                if(glm::sqrt(square(x - 0.5f) + square(y-0.5f) + square(z-0.5f)) <= 0.25f) {
-                    svo.set_color_at_location({x, y, z}, {x, y, z, 1.f});
+    for(f32 x=-0.5f; x<=0.5f; x+=step) {
+        for(f32 y=-0.5f; y<=0.5f; y+=step) {
+            for(f32 z=-0.5f; z<=0.5f; z+=step) {
+                if(glm::sqrt(square(x) + square(y) + square(z)) <= 0.5f) {
+                    svo.set_color_at_location({x, y, z}, 
+                    {   glm::fract(x), 
+                        glm::fract(y), 
+                        glm::fract(z), 
+                        1.f});
                 }
             }
         }
