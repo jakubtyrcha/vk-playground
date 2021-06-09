@@ -83,7 +83,7 @@ int main() {
     pool.reset(10000, 10000);
 
     Obb volume{ .center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f} };
-    i32 max_depth = 2;
+    i32 max_depth = 3;
     Svo svo{pool, volume, max_depth};
 
     //svo.set_color_at_leaf_node_voxel({}, Vec4{1, 1, 1, 1});
@@ -92,10 +92,13 @@ int main() {
     for(f32 x=0.25f; x<=0.75f; x+=step) {
         for(f32 y=0.25f; y<=0.75f; y+=step) {
             for(f32 z=0.25f; z<=0.75f; z+=step) {
-                svo.set_color_at_location({x, y, z}, {x, y, z, 1.f});
+                if(glm::sqrt(square(x - 0.5f) + square(y-0.5f) + square(z-0.5f)) <= 0.25f) {
+                    svo.set_color_at_location({x, y, z}, {x, y, z, 1.f});
+                }
             }
         }
     }
+    svo.build_tree();
 
     for(i32 y=0; y<resolution.y; y++) {
         for(i32 x=0; x<resolution.x; x++) {
