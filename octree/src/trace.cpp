@@ -44,8 +44,8 @@ struct ImageBuffer {
 
 int main() {
     Vec2i resolution{800, 600};
-    Vec3 camera_eye{0, 0, -1};
-    Vec3 camera_dir = glm::normalize(Vec3{0, 0, 1});
+    Vec3 camera_eye{1, 1, -1};
+    Vec3 camera_dir = glm::normalize(Vec3{-1, -1, 1});
     Vec3 camera_up{0, 1, 0};
     f32 camera_fov_y = glm::half_pi<f32>();
 
