@@ -44,7 +44,7 @@ struct ImageBuffer {
 
 int main() {
     Vec2i resolution{800, 600};
-    Vec3 camera_eye{1, 1, -1};
+    Vec3 camera_eye{1, 1, -2};
     Vec3 camera_dir = glm::normalize(Vec3{-1, -1, 1});
     Vec3 camera_up{0, 1, 0};
     f32 camera_fov_y = glm::half_pi<f32>();
@@ -71,13 +71,13 @@ int main() {
     for(f32 x=-0.5f; x<=0.5f; x+=step) {
         for(f32 y=-0.5f; y<=0.5f; y+=step) {
             for(f32 z=-0.5f; z<=0.5f; z+=step) {
-                if(glm::sqrt(square(x) + square(y) + square(z)) <= 0.5f) {
+                //if(glm::sqrt(square(x) + square(y) + square(z)) <= 0.5f) {
                     svo.set_color_at_location({x, y, z}, 
                     {   glm::fract(x), 
                         glm::fract(y), 
                         glm::fract(z), 
                         1.f});
-                }
+                //}
             }
         }
     }
