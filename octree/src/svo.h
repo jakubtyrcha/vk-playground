@@ -108,7 +108,7 @@ struct BrickPayload {
 };
 
 namespace Tracing {
-    constexpr f32 TRACE_EPS = 0.000001f;
+    constexpr f32 TRACE_EPS = 0.00001f;
 
     struct RayHit {
         Vec4 color;
@@ -420,7 +420,7 @@ struct Svo {
         // calculate voxel coord
         const f32 sample_distance = get_voxel_normalised_size(max_depth_);
         const Vec3 voxel_coord = local_normalised_position / sample_distance + get_normalised_position_to_sample_offset();
-        Vec3i voxel_icoord = voxel_coord + 0.5f; // rounding
+        Vec3i voxel_icoord = voxel_coord + 0.5f;
         // if we hit voxel at 1., we need to clamp so it's stored within non-border voxel
         voxel_icoord = glm::min(voxel_icoord, get_voxel_res(max_depth_) - 1);
 
@@ -912,21 +912,22 @@ namespace Tracing
         ) 
     {
         using SVOTYPE = TSvo;
+        // todo: do I need that function?
         Ray obb_ray = svo.obb_.to_local(ray);
         // convert to [0..1]
-        obb_ray.origin = obb_ray.origin / svo.obb_.half_extent + Vec3{0.5f};
+        obb_ray.origin = svo.get_local_normalised_position(ray.origin);
         const Vec3 inv_ray_dir = Vec3{1.f} / obb_ray.direction;
 
         f32 t = 0.f;
-        if(glm::any(glm::lessThan(ray.origin, Vec3{})) || glm::any(glm::greaterThan(ray.origin, Vec3{1}))) {
+        if(glm::any(glm::lessThan(obb_ray.origin, Vec3{})) || glm::any(glm::greaterThan(obb_ray.origin, Vec3{1}))) {
             // find t till hit the front plane
             Vec3 enter_planes = glm::lessThan(inv_ray_dir, Vec3{0});
-            Vec3 t3 = ((enter_planes - ray.origin) * inv_ray_dir);
+            Vec3 t3 = ((enter_planes - obb_ray.origin) * inv_ray_dir);
             f32 max_t = glm::fmax(t3.x, t3.y, t3.z);
             t = glm::max(0.f, max_t + TRACE_EPS);
             if(t > 0) {
                 // move rayo to t, start trace in the brick
-                obb_ray.origin += t * ray.direction;
+                obb_ray.origin += t * obb_ray.direction;
             }
 
             // if not in the volume - return immediatelly 
