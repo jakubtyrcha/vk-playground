@@ -524,7 +524,9 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
 
 TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]",
     (SvoPool<4, BrickVoxelPosition::NodeCorner>)
+   ,(SvoPool<5, BrickVoxelPosition::NodeCorner>)
    ,(SvoPool<4, BrickVoxelPosition::NodeCenter>)
+   ,(SvoPool<5, BrickVoxelPosition::NodeCenter>)
 )
 {
     TestType pool;
@@ -532,7 +534,7 @@ TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]
     {
         pool.reset(10000, 10000);
         Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
-        i32 max_depth = 2;
+        i32 max_depth = 5;
         Svo svo{pool, volume, max_depth};
 
         // fill voxel and trace a ray through the same location
@@ -598,7 +600,7 @@ TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]
             std::array<Vec3i, 3> dirs = {{{1,0,0},{0,1,0},{0,0,1}}};
             for (auto dir : dirs)
             {
-                for (i32 i = 1; i <= 4; i *= 2)
+                for (i32 i = 1; i <= 16; i *= 2)
                 {
                     Vec3 sample_location = svo.get_leaf_node_voxel_wposition(voxel + dir * i);
                     auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = sample_location, .direction = -dir});
