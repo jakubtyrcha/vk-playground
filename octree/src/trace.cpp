@@ -64,7 +64,7 @@ int main() {
     pool.reset(10000, 10000);
 
     Obb volume{ .center = Vec3{}, .orientation = Mat3{1}, .half_extent = Vec3{1.f} };
-    i32 max_depth = 3;
+    i32 max_depth = 4;
     Svo svo{pool, volume, max_depth};
 
     f32 step = svo.get_voxel_world_size();
