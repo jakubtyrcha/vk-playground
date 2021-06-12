@@ -673,11 +673,6 @@ TEST_CASE("Can trace ray through the SVO node center edition", "[svo_trace]")
                     auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset,
                                                           .direction = glm::normalize(-offset)});
                                                           
-                    if(!maybe_hit)
-                    {
-                        _mm_pause();
-                    }
-
                     REQUIRE(maybe_hit);
 
                     maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset + Vec3{0.f, -1.f, 0.f},
@@ -686,20 +681,20 @@ TEST_CASE("Can trace ray through the SVO node center edition", "[svo_trace]")
                 }
             }
 
-            // for (f32 x = 0.00001f; x <= 1.f; x += step * 0.25f) {
-            //     for (f32 y = 0.00001f; y <= 1.f; y += step * 0.25f) {
-            //         Vec3 target{ -1.f + x, -1.f, -1.f + y };
-            //         Vec3 offset = Vec3{ 7.f, -200.f, -10.f };
+            for (f32 x = 0.00001f; x <= 1.f; x += step * 0.25f) {
+                for (f32 y = 0.00001f; y <= 1.f; y += step * 0.25f) {
+                    Vec3 target{ -1.f + x, -1.f, -1.f + y };
+                    Vec3 offset = Vec3{ 7.f, -200.f, -10.f };
 
-            //         auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset,
-            //                                               .direction = glm::normalize(-offset)});
-            //         REQUIRE(maybe_hit);
+                    auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset,
+                                                          .direction = glm::normalize(-offset)});
+                    REQUIRE(maybe_hit);
 
-            //         maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset + Vec3{-1.f, 0.f, 0.f},
-            //                                               .direction = glm::normalize(-offset)});
-            //         REQUIRE(!maybe_hit);
-            //     }
-            // }
+                    maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset + Vec3{-1.f, 0.f, 0.f},
+                                                          .direction = glm::normalize(-offset)});
+                    REQUIRE(!maybe_hit);
+                }
+            }
         }
     }
 }

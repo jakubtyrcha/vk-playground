@@ -821,7 +821,7 @@ namespace Tracing
         const f32 leaf_node_size = 1.f / (1 << max_depth);
 
         // todo: min because of 1.0
-        Vec3i current_leaf_node_icoord = ray.origin / Vec3{leaf_node_size};
+        Vec3i current_leaf_node_icoord = glm::min(Vec3i{ray.origin / Vec3{leaf_node_size}}, Vec3i{(1 << max_depth) - 1});
         // init with the root
         int current_depth = 0;
         const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
@@ -862,7 +862,7 @@ namespace Tracing
                 Vec3 brick_coord;
 
                 if constexpr(TSvo::PoolType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
-                    brick_coord = node_ncoord * Vec3{(TSvo::PoolType::BRICK_SIZE - 2) / (f32)TSvo::PoolType::BRICK_SIZE} + Vec3{0.5f / (f32)TSvo::PoolType::BRICK_SIZE};
+                    brick_coord = node_ncoord * Vec3{(TSvo::PoolType::BRICK_SIZE - 2) / (f32)TSvo::PoolType::BRICK_SIZE} + Vec3{1.f / (f32)TSvo::PoolType::BRICK_SIZE};
                 }
                 else if(TSvo::PoolType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
                     brick_coord = node_ncoord;
