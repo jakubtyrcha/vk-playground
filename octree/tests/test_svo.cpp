@@ -518,6 +518,192 @@ TEST_CASE("Can trace ray through the brick", "[svo_trace]")
     }
 }
 
+TEST_CASE("Can trace ray through the SVO node center edition", "[svo_trace]")
+{
+    SvoPool<4, BrickVoxelPosition::NodeCenter> pool;
+    SECTION("Trace a voxel at the edge")
+    {
+        pool.reset(10000, 10000);
+        Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
+        i32 max_depth = 2;
+        Svo svo{pool, volume, max_depth};
+
+        // fill voxel and trace a ray through the same location
+        svo.set_color_at_location(Vec3{0, 0, 0}, Vec4{1, 1, 1, 1});
+        svo.build_tree();
+
+        {
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{.0001f}, .direction = Vec3{1, 0, 0}});
+            REQUIRE(maybe_hit);
+        }
+        {
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{1, 1, 1}, .direction = glm::normalize(Vec3{-1, -1, -1})});
+            REQUIRE(maybe_hit);
+        }
+        {
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{1, 1, 0.5}, .direction = glm::normalize(Vec3{-1, -1, -1})});
+            REQUIRE(!maybe_hit);
+        }
+    }
+
+    SECTION("Trace through multiple nodes")
+    {
+        pool.reset(10000, 10000);
+        Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
+        i32 max_depth = 2;
+        Svo svo{pool, volume, max_depth};
+
+        const auto voxel = Vec3i{1, 4, 7};
+
+        // fill voxel and trace a ray through the same location
+        svo.set_color_at_leaf_node_voxel(voxel, Vec4{1, 1, 1, 1});
+        svo.build_tree();
+
+        {
+            Vec3 sample_location = svo.get_leaf_node_voxel_wposition(voxel);
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{1, 0, 0}});
+            REQUIRE(maybe_hit);
+        }
+        {
+            Vec3 sample_location = svo.get_leaf_node_voxel_wposition(voxel - Vec3i{0, 0, 1});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
+            REQUIRE(maybe_hit);
+        }
+        {
+            Vec3 sample_location = svo.get_leaf_node_voxel_wposition(voxel - Vec3i{0, 0, 2});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
+            REQUIRE(maybe_hit);
+        }
+        {
+            Vec3 sample_location = svo.get_leaf_node_voxel_wposition(voxel - Vec3i{0, 0, 4});
+            auto maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = sample_location, .direction = Vec3{0, 0, 1}});
+            REQUIRE(maybe_hit);
+        }
+    }
+
+    SECTION("Trace from outside of the brick")
+    {
+        pool.reset(10000, 10000);
+
+        Obb volume{.center = Vec3{0.5f}, .orientation = Mat3{1}, .half_extent = Vec3{0.5f}};
+        i32 max_depth = 2;
+        Svo svo{pool, volume, max_depth};
+
+        svo.set_color_at_leaf_node_voxel({}, Vec4{1, 1, 1, 1});
+        svo.build_tree();
+
+        auto maybe_hit = Tracing::trace_svo_ray(svo, {
+            .origin = {1, 0, -1}, 
+            .direction = Vec3{-0.345923901, 0.519543409, 0.781288147}});
+        REQUIRE(!maybe_hit);
+    }
+
+    SECTION("Trace a cube with non-identity obb transformation")
+    {
+        pool.reset(10000, 10000);
+
+        Obb volume{.center = Vec3{0.f}, .orientation = Mat3{1}, .half_extent = Vec3{1.f}};
+        i32 max_depth = 3;
+        Svo svo{pool, volume, max_depth};
+
+        f32 step = svo.get_voxel_world_size();
+        for (f32 x = -1.f; x <= 0.f; x += step) {
+            for (f32 y = -1.f; y <= 0.f; y += step) {
+                for (f32 z = -1.f; z <= 0.f; z += step) {
+                    svo.set_color_at_location({x, y, z}, Vec4{1});
+                }
+            }
+        }
+
+        svo.build_tree();
+
+        SECTION("Rays parallel to an axis")
+        {
+
+            auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {-0.5f, -0.5f, -5.f},
+                                                          .direction = Vec3{0, 0, 1.f}});
+            REQUIRE(maybe_hit);
+
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {-0.5f, -0.5f, 5.f},
+                                                     .direction = Vec3{0, 0, -1.f}});
+            REQUIRE(maybe_hit);
+
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {0.5f, -0.5f, 5.f},
+                                                     .direction = Vec3{0, 0, -1.f}});
+            REQUIRE(!maybe_hit);
+        }
+
+        SECTION("Rays almost parallel to an axis")
+        {
+            auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {-0.5f, -0.5f, -5.f},
+                                                          .direction = glm::normalize(Vec3{-0.0001f, 0.0001f, 1.f})});
+            REQUIRE(maybe_hit);
+
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {-0.5f, -0.5f, 5.f},
+                                                     .direction = glm::normalize(Vec3{-0.0001f, 0.0001f, -1.f})});
+            REQUIRE(maybe_hit);
+
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {0.5f, -0.5f, 5.f},
+                                                     .direction = glm::normalize(Vec3{-0.0001f, 0.0001f, -1.f})});
+            REQUIRE(!maybe_hit);
+        }
+
+        SECTION("Angled rays")
+        {
+            auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {2.f, 2.f, -0.5f},
+                                                          .direction = glm::normalize(Vec3{-1.f, -1.f, 0.f})});
+            REQUIRE(maybe_hit);
+
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {-2.f, -2.f, -0.5f},
+                                                          .direction = glm::normalize(Vec3{1.f, 1.f, 0.f})});
+            REQUIRE(maybe_hit);
+
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = {-2.f, -2.f, 0.f + step},
+                                                          .direction = glm::normalize(Vec3{1.f, 1.f, 0.f})});
+            REQUIRE(!maybe_hit);
+        }
+
+        SECTION("Watertight rays")
+        {
+            for (f32 x = 0.00001f; x <= 1.f; x += step * 0.25f) {
+                for (f32 y = 0.00001f; y <= 1.f; y += step * 0.25f) {
+                    Vec3 target{ -1.f + x, -1.f + y, 0.f };
+                    Vec3 offset = Vec3{ 7.f, 3.f, 200.f };
+
+                    auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset,
+                                                          .direction = glm::normalize(-offset)});
+                                                          
+                    if(!maybe_hit)
+                    {
+                        _mm_pause();
+                    }
+
+                    REQUIRE(maybe_hit);
+
+                    maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset + Vec3{0.f, -1.f, 0.f},
+                                                          .direction = glm::normalize(-offset)});
+                    REQUIRE(!maybe_hit);
+                }
+            }
+
+            // for (f32 x = 0.00001f; x <= 1.f; x += step * 0.25f) {
+            //     for (f32 y = 0.00001f; y <= 1.f; y += step * 0.25f) {
+            //         Vec3 target{ -1.f + x, -1.f, -1.f + y };
+            //         Vec3 offset = Vec3{ 7.f, -200.f, -10.f };
+
+            //         auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset,
+            //                                               .direction = glm::normalize(-offset)});
+            //         REQUIRE(maybe_hit);
+
+            //         maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset + Vec3{-1.f, 0.f, 0.f},
+            //                                               .direction = glm::normalize(-offset)});
+            //         REQUIRE(!maybe_hit);
+            //     }
+            // }
+        }
+    }
+}
+
 TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
 {
     SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
@@ -672,10 +858,6 @@ TEST_CASE("Can trace ray through the SVO", "[svo_trace]")
 
                     auto maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset,
                                                           .direction = glm::normalize(-offset)});
-                    if(!maybe_hit)
-                    {
-                        _mm_pause();
-                    }
                     REQUIRE(maybe_hit);
 
                     maybe_hit = Tracing::trace_svo_ray(svo, {.origin = target + offset + Vec3{0.f, -1.f, 0.f},

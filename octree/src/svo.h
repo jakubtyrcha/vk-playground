@@ -388,6 +388,7 @@ struct Svo {
         }
     }
 
+    // TODO: this is voxel coord, not normalised position
     static constexpr Vec3 get_normalised_position_to_sample_offset() {
         if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             return Vec3{-0.5f};
@@ -399,12 +400,7 @@ struct Svo {
 
     Vec3 get_leaf_node_voxel_wposition(Vec3i coord) const {
         const f32 voxel_size = get_voxel_world_size();
-        if constexpr(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
-            //return Vec3{coord} * Vec3{voxel__size} + obb_.half_extent;
-        }
-        else if(TPool::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
-            return Vec3{coord} * Vec3{voxel_size}; //? + obb_.half_extent;
-        }
+        return ((Vec3{coord} - get_normalised_position_to_sample_offset()) * Vec3{voxel_size} - obb_.half_extent) * obb_.orientation + obb_.center;
     }
 
     void set_color_at_leaf_node_voxel(Vec3i coord, Vec4 color) {
@@ -866,7 +862,7 @@ namespace Tracing
                 Vec3 brick_coord;
 
                 if constexpr(TSvo::PoolType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
-                    brick_coord = node_ncoord * Vec3{(TSvo::PoolType::BRICK_SIZE - 2) / (f32)TSvo::PoolType::BRICK_SIZE};
+                    brick_coord = node_ncoord * Vec3{(TSvo::PoolType::BRICK_SIZE - 2) / (f32)TSvo::PoolType::BRICK_SIZE} + Vec3{0.5f / (f32)TSvo::PoolType::BRICK_SIZE};
                 }
                 else if(TSvo::PoolType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
                     brick_coord = node_ncoord;
