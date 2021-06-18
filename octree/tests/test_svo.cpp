@@ -548,13 +548,13 @@ TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]
             REQUIRE(maybe_hit);
             maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{.0001f}, .direction = Vec3{1, 0, 0}});
             REQUIRE(maybe_hit);
-            maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{-0.0001f}, .direction = Vec3{1, 0, 0}});
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = Vec3{-0.0001f, 0, 0}, .direction = Vec3{1, 0, 0}});
             REQUIRE(maybe_hit);
             maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{1.f}, .direction = Vec3{-1, 0, 0}});
             REQUIRE(maybe_hit);
             maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{0.9999f}, .direction = Vec3{-1, 0, 0}});
             REQUIRE(maybe_hit);
-            maybe_hit = Tracing::trace_svo_local_ray_starting_within(svo, {.origin = Vec3{1.0001f}, .direction = Vec3{-1, 0, 0}});
+            maybe_hit = Tracing::trace_svo_ray(svo, {.origin = Vec3{1.0001f, 1.f, 1.f}, .direction = Vec3{-1, 0, 0}});
             REQUIRE(maybe_hit);
         }
         SECTION("From the middle")
@@ -727,5 +727,33 @@ TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]
                 }
             }
         }
+    }
+
+    SECTION("Failing voxelised sphere use case")
+    {
+        pool.reset(10000, 10000);
+
+        Obb volume{ .center = Vec3{}, .orientation = Mat3{1}, .half_extent = Vec3{1.f} };
+        i32 max_depth = 4;
+        Svo svo{pool, volume, max_depth};
+
+        f32 step = svo.get_voxel_world_size();
+        for(f32 x=-0.5f; x<=0.5f; x+=step) {
+            for(f32 y=-0.5f; y<=0.5f; y+=step) {
+                for(f32 z=-0.5f; z<=0.5f; z+=step) {
+                    if(glm::sqrt(square(x) + square(y) + square(z)) <= 0.5f) {
+                        svo.set_color_at_location({x, y, z}, 
+                        {   glm::fract(x), 
+                            glm::fract(y), 
+                            glm::fract(z), 
+                            1.f});
+                    }
+                }
+            }
+        }
+        svo.build_tree();
+
+        Ray ray{.origin= {1, 1, -0.5}, .direction= {-0.548839092, -0.144500583, 0.823343813}};
+        auto result = Tracing::trace_svo_ray(svo, ray);
     }
 }

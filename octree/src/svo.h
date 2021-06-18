@@ -130,6 +130,9 @@ namespace Tracing {
         const Vec3i step = glm::sign(inv_ray_dir);
         f32 current_t = 0;
 
+        assert(glm::all(glm::greaterThanEqual(ray_origin, Vec3{})));
+        assert(glm::all(glm::lessThanEqual(ray_origin, Vec3{1.f})));
+        
         while(true) {
             Vec4 sample = brick.fetch(voxel);
             bool collision = glm::any(glm::greaterThan(sample, Vec4{}));
@@ -820,8 +823,12 @@ namespace Tracing
         const i32 max_depth = svo.max_depth_;
         const f32 leaf_node_size = 1.f / (1 << max_depth);
 
-        // todo: min because of 1.0
-        Vec3i current_leaf_node_icoord = glm::min(Vec3i{ray.origin / Vec3{leaf_node_size}}, Vec3i{(1 << max_depth) - 1});
+        assert(glm::all(glm::greaterThanEqual(ray.origin, Vec3{})));
+        assert(glm::all(glm::lessThanEqual(ray.origin, Vec3{1.f})));
+
+        Vec3i current_leaf_node_icoord = Vec3i{glm::floor(ray.origin / Vec3{leaf_node_size})};
+        current_leaf_node_icoord -= glm::equal(ray.origin, Vec3{1.f});
+
         // init with the root
         int current_depth = 0;
         const OctreeNode * current_node = &svo.pool_.get_node(svo.root_node_);
@@ -883,7 +890,9 @@ namespace Tracing
             f32 current_t = glm::fmin(t3.x, t3.y, t3.z);
             current_sample_position = ray.origin + (current_t + TRACE_EPS) * ray.direction;
 
-            current_leaf_node_icoord += Vec3i{1 << (max_depth - current_depth)} * step * Vec3i{glm::equal(t3, Vec3{current_t})};
+            //current_leaf_node_icoord += Vec3i{1 << (max_depth - current_depth)} * step * Vec3i{glm::equal(t3, Vec3{current_t})};
+            current_leaf_node_icoord = Vec3i{glm::floor(current_sample_position / Vec3{leaf_node_size})};
+            current_leaf_node_icoord -= glm::equal(current_sample_position, Vec3{1.f});
 
             // is inside of the tree
             if(current_leaf_node_icoord != glm::clamp(current_leaf_node_icoord, {}, {(1 << max_depth) - 1})) {
