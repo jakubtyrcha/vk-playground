@@ -890,9 +890,13 @@ namespace Tracing
             f32 current_t = glm::fmin(t3.x, t3.y, t3.z);
             current_sample_position = ray.origin + (current_t + TRACE_EPS) * ray.direction;
 
-            //current_leaf_node_icoord += Vec3i{1 << (max_depth - current_depth)} * step * Vec3i{glm::equal(t3, Vec3{current_t})};
-            current_leaf_node_icoord = Vec3i{glm::floor(current_sample_position / Vec3{leaf_node_size})};
-            current_leaf_node_icoord -= glm::equal(current_sample_position, Vec3{1.f});
+            //// current_leaf_node_icoord += step * Vec3i{glm::equal(t3, Vec3{current_t})};
+            Vec3i new_leaf_node_icoord = Vec3i{glm::floor(current_sample_position / Vec3{leaf_node_size})};
+            if(new_leaf_node_icoord == current_leaf_node_icoord) {
+                new_leaf_node_icoord += step * Vec3i{glm::equal(t3, Vec3{current_t})};
+            }
+            new_leaf_node_icoord -= glm::equal(current_sample_position, Vec3{1.f}) && glm::equal(step, Vec3i{0});
+            current_leaf_node_icoord = new_leaf_node_icoord;
 
             // is inside of the tree
             if(current_leaf_node_icoord != glm::clamp(current_leaf_node_icoord, {}, {(1 << max_depth) - 1})) {

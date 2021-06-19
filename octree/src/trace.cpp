@@ -107,11 +107,6 @@ int main() {
                 image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
             }
 #elif 1
-            if(x == 466 && y == 148)
-            {
-                _mm_pause();
-            }
-
             Ray ray{.origin = camera_eye, .direction = camera_ray_dir_worldspace};
             if(auto result = Tracing::trace_svo_ray(svo, ray); result) {
                 image_buffer.store_color({x, y}, {Vec3{result->color}, 1});

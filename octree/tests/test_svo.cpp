@@ -729,7 +729,7 @@ TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]
         }
     }
 
-    SECTION("Failing voxelised sphere use case")
+    SECTION("Failing use cases")
     {
         pool.reset(10000, 10000);
 
@@ -753,7 +753,22 @@ TEMPLATE_TEST_CASE("Can trace ray through the SVO nodes", "[svo_trace][template]
         }
         svo.build_tree();
 
-        Ray ray{.origin= {1, 1, -0.5}, .direction= {-0.548839092, -0.144500583, 0.823343813}};
-        auto result = Tracing::trace_svo_ray(svo, ray);
+        SECTION("Ray failing because of messed up tranisition between nodes of different size") {
+            Ray ray{.origin= {1, 1, -0.5}, .direction= {-0.548839092, -0.144500583, 0.823343813}};
+            auto result = Tracing::trace_svo_ray(svo, ray);
+            REQUIRE(!result);
+        }
+
+        SECTION("Ray stuck with infinite loop") {
+            Ray ray{.origin= {1, 1, -0.5}, .direction= {-0.999220133, 0.00505414605, -0.0391596556}};
+            auto result = Tracing::trace_svo_ray(svo, ray);
+            REQUIRE(!result);
+        }
+
+        SECTION("Ray stuck with infinite loop v2") {
+            Ray ray{.origin= {1, 1, -0.5}, .direction= {-0.999983430, -0.00573852658, -0.000237464905}};
+            auto result = Tracing::trace_svo_ray(svo, ray);
+            REQUIRE(!result);
+        }
     }
 }
