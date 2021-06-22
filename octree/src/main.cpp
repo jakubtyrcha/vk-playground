@@ -9,6 +9,8 @@
 //   the backend itself (imgui_impl_vulkan.cpp), but should PROBABLY NOT be used by your own engine/app code.
 // Read comments in imgui_impl_vulkan.h.
 
+#include "svo.h"
+
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
@@ -19,17 +21,42 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
-// [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
-// To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
-// Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
 //#define IMGUI_UNLIMITED_FRAME_RATE
 #ifdef _DEBUG
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
+
+using u8Vec4 = glm::u8vec4;
+
+struct ImageBuffer {
+    using PixelType = u8Vec4;
+    std::vector<PixelType> data_;
+    Vec2i resolution_;
+
+    ImageBuffer(Vec2i resolution) : resolution_(resolution) {
+        data_.resize(resolution.x * resolution.y);
+    }
+
+    const PixelType* data() const {
+        return data_.data();
+    }
+
+    i32 get_stride() const {
+        return sizeof(PixelType) * resolution_.x;
+    }
+
+    void clear(u8Vec4 color) {
+        const i32 N = resolution_.x * resolution_.y;
+        for(i32 i=0; i<N; i++) {
+            data_[i] = color;
+        }
+    }
+
+    void store_color(Vec2i texel, Vec4 color) {
+        u8Vec4 qcolor = glm::clamp(color * Vec4{255}, {}, {255});
+        data_[texel.x + texel.y * resolution_.x] = qcolor;
+    }
+};
 
 static VkAllocationCallbacks*   g_Allocator = NULL;
 static VkInstance               g_Instance = VK_NULL_HANDLE;
@@ -44,6 +71,13 @@ static VkDescriptorPool         g_DescriptorPool = VK_NULL_HANDLE;
 static ImGui_ImplVulkanH_Window g_MainWindowData;
 static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
+
+struct RenderResources {
+    VkBuffer upload_buffer;
+    VkDeviceMemory upload_buffer_host_mem;
+};
+
+RenderResources g_RenderResources;
 
 static void check_vk_result(VkResult err)
 {
@@ -258,7 +292,17 @@ static void CleanupVulkanWindow()
     ImGui_ImplVulkanH_DestroyWindow(g_Instance, g_Device, &g_MainWindowData, g_Allocator);
 }
 
-static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
+static uint32_t Vulkan_MemoryType(VkMemoryPropertyFlags properties, uint32_t type_bits)
+{
+    VkPhysicalDeviceMemoryProperties prop;
+    vkGetPhysicalDeviceMemoryProperties(g_PhysicalDevice, &prop);
+    for (uint32_t i = 0; i < prop.memoryTypeCount; i++)
+        if ((prop.memoryTypes[i].propertyFlags & properties) == properties && type_bits & (1 << i))
+            return i;
+    return 0xFFFFFFFF; // Unable to find memoryType
+}
+
+static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data, ImageBuffer* ib)
 {
     VkResult err;
 
@@ -289,6 +333,92 @@ static void FrameRender(ImGui_ImplVulkanH_Window* wd, ImDrawData* draw_data)
         err = vkBeginCommandBuffer(fd->CommandBuffer, &info);
         check_vk_result(err);
     }
+
+    // overwrite the background with custom image
+    {
+        u64 upload_size = wd->Width * wd->Height * 4 * sizeof(u8);
+
+        VkBuffer & upload_buffer = g_RenderResources.upload_buffer;
+        VkDeviceMemory & upload_buffer_host_mem = g_RenderResources.upload_buffer_host_mem;
+
+        if (!upload_buffer)
+        {
+            VkBufferCreateInfo buffer_info = {};
+            buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            buffer_info.size = upload_size;
+            buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            err = vkCreateBuffer(g_Device, &buffer_info, g_Allocator, &upload_buffer);
+            check_vk_result(err);
+            VkMemoryRequirements req;
+            vkGetBufferMemoryRequirements(g_Device, upload_buffer, &req);
+            VkMemoryAllocateInfo alloc_info = {};
+            alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            alloc_info.allocationSize = req.size;
+            alloc_info.memoryTypeIndex = Vulkan_MemoryType(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, req.memoryTypeBits);
+            err = vkAllocateMemory(g_Device, &alloc_info, g_Allocator, &upload_buffer_host_mem);
+            check_vk_result(err);
+            err = vkBindBufferMemory(g_Device, upload_buffer, upload_buffer_host_mem, 0);
+            check_vk_result(err);
+        }
+
+        {
+            u8Vec4 *map = NULL;
+            err = vkMapMemory(g_Device, upload_buffer_host_mem, 0, VK_WHOLE_SIZE, 0, (void **)(&map));
+            check_vk_result(err);
+            i32 W = wd->Width;
+            i32 H = wd->Height;
+            for(i32 y=0; y<H; y++) {
+                for(i32 x=0; x<W; x++) {
+                    u8Vec4 s = ib->data()[x + y * W];
+                    map[x + y * W] = {s.z, s.y, s.x, s.w};
+                }
+            }
+            VkMappedMemoryRange range[1] = {};
+            range[0].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+            range[0].memory = upload_buffer_host_mem;
+            range[0].size = VK_WHOLE_SIZE;
+            err = vkFlushMappedMemoryRanges(g_Device, 1, range);
+            check_vk_result(err);
+            vkUnmapMemory(g_Device, upload_buffer_host_mem);
+        }
+
+        VkImageMemoryBarrier copy_barrier[1] = {};
+        copy_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        copy_barrier[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        copy_barrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        copy_barrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        copy_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        copy_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        copy_barrier[0].image = wd->Frames[wd->FrameIndex].Backbuffer;
+        copy_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy_barrier[0].subresourceRange.levelCount = 1;
+        copy_barrier[0].subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(fd->CommandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, copy_barrier);
+
+        VkBufferImageCopy region = {};
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent.width = wd->Width;
+        region.imageExtent.height = wd->Height;
+        region.imageExtent.depth = 1;
+        vkCmdCopyBufferToImage(fd->CommandBuffer, upload_buffer, wd->Frames[wd->FrameIndex].Backbuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        VkImageMemoryBarrier use_barrier[1] = {};
+        use_barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        use_barrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        use_barrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        use_barrier[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        use_barrier[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        use_barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        use_barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        use_barrier[0].image = wd->Frames[wd->FrameIndex].Backbuffer;
+        use_barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        use_barrier[0].subresourceRange.levelCount = 1;
+        use_barrier[0].subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(fd->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, use_barrier);
+    }
+
     {
         VkRenderPassBeginInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -381,6 +511,7 @@ int main(int, char**)
     int w, h;
     glfwGetFramebufferSize(window, &w, &h);
     ImGui_ImplVulkanH_Window* wd = &g_MainWindowData;
+    wd->ClearEnable = false;
     SetupVulkanWindow(wd, surface, w, h);
 
     // Setup Dear ImGui context
@@ -459,6 +590,41 @@ int main(int, char**)
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    i32 window_width;
+    i32 window_height;
+    glfwGetFramebufferSize(window, &window_width, &window_height);
+
+    //
+    Vec2i resolution{window_width, window_height};
+    Vec3 camera_eye{1, 1, -0.5f};
+    Vec3 camera_dir = glm::normalize(Vec3{-1, -1, 1});
+    Vec3 camera_up{0, 1, 0};
+    f32 camera_fov_y = glm::half_pi<f32>();
+
+    ImageBuffer image_buffer{resolution};
+
+    SvoPool<4, BrickVoxelPosition::NodeCorner> pool;
+    pool.reset(10000, 10000);
+
+    Obb volume{ .center = Vec3{}, .orientation = Mat3{1}, .half_extent = Vec3{1.f} };
+    i32 max_depth = 2;
+    Svo svo{pool, volume, max_depth};
+
+    f32 step = svo.get_voxel_world_size();
+    for(f32 x=-0.5f; x<=0.5f; x+=step) {
+        for(f32 y=-0.5f; y<=0.5f; y+=step) {
+            for(f32 z=-0.5f; z<=0.5f; z+=step) {
+                if(glm::sqrt(square(x) + square(y) + square(z)) <= 0.5f) {
+                    svo.set_color_at_location({x, y, z}, 
+                    {   glm::fract(x), 
+                        glm::fract(y), 
+                        glm::fract(z), 
+                        1.f});
+                }
+            }
+        }
+    }
+    svo.build_tree();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -473,16 +639,27 @@ int main(int, char**)
         // Resize swap chain?
         if (g_SwapChainRebuild)
         {
-            int width, height;
-            glfwGetFramebufferSize(window, &width, &height);
-            if (width > 0 && height > 0)
+            glfwGetFramebufferSize(window, &window_width, &window_height);
+            if (window_width > 0 && window_height > 0)
             {
                 ImGui_ImplVulkan_SetMinImageCount(g_MinImageCount);
-                ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_MainWindowData, g_QueueFamily, g_Allocator, width, height, g_MinImageCount);
+                ImGui_ImplVulkanH_CreateOrResizeWindow(g_Instance, g_PhysicalDevice, g_Device, &g_MainWindowData, g_QueueFamily, g_Allocator, window_width, window_height, g_MinImageCount);
                 g_MainWindowData.FrameIndex = 0;
                 g_SwapChainRebuild = false;
+
+                if(g_RenderResources.upload_buffer) {
+                    vkDestroyBuffer(g_Device, g_RenderResources.upload_buffer, g_Allocator);
+                    vkFreeMemory(g_Device, g_RenderResources.upload_buffer_host_mem, g_Allocator);
+                }
+
+                g_RenderResources.upload_buffer = {};
+                g_RenderResources.upload_buffer_host_mem = {};
+
+                resolution = Vec2i{window_width, window_height};
+                image_buffer = ImageBuffer{resolution};
             }
         }
+        
 
         // Start the Dear ImGui frame
         ImGui_ImplVulkan_NewFrame();
@@ -526,6 +703,38 @@ int main(int, char**)
             ImGui::End();
         }
 
+        {
+            image_buffer.clear({ clear_color.x * 255, clear_color.y * 255, clear_color.z * 255, clear_color.w * 255});
+
+            Mat4 view_mat = glm::lookAtLH(camera_eye, camera_eye + camera_dir, camera_up);
+            Mat4 inv_view_mat = glm::inverse(view_mat);
+            Mat4 projection_mat = glm::perspectiveFovLH_ZO(camera_fov_y, (f32)resolution.x, (f32)resolution.y, 1.f, 100.f);
+            Mat4 inv_projection_mat = glm::inverse(projection_mat);
+
+            for (i32 y = 0; y < resolution.y; y++)
+            {
+                for (i32 x = 0; x < resolution.x; x++)
+                {
+                    const Vec2 framebuffer_coord = Vec2{x, y} + 0.5f;
+                    const Vec3 screen_ray_ndf_coord = {(framebuffer_coord / Vec2{resolution}) * Vec2{2, -2} + Vec2{-1, 1}, 1};
+
+                    Vec4 camera_ray_dir_viewspace_homog = inv_projection_mat * Vec4{screen_ray_ndf_coord, 1};
+                    // todo: wtf is this negative
+                    Vec3 camera_ray_dir_viewspace = glm::normalize(Vec3{camera_ray_dir_viewspace_homog / camera_ray_dir_viewspace_homog.w});
+
+                    Vec3 camera_ray_dir_worldspace = Mat3{inv_view_mat} * camera_ray_dir_viewspace;
+
+                    Ray ray{.origin = camera_eye, .direction = camera_ray_dir_worldspace};
+                    if(auto result = Tracing::trace_svo_ray(svo, ray); result) {
+                        image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
+                    }
+                    else {
+                        //image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
+                    }
+                }
+            }
+        }
+
         // Rendering
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
@@ -536,7 +745,7 @@ int main(int, char**)
             wd->ClearValue.color.float32[1] = clear_color.y * clear_color.w;
             wd->ClearValue.color.float32[2] = clear_color.z * clear_color.w;
             wd->ClearValue.color.float32[3] = clear_color.w;
-            FrameRender(wd, draw_data);
+            FrameRender(wd, draw_data, &image_buffer);
             FramePresent(wd);
         }
     }

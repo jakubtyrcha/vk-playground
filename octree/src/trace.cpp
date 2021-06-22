@@ -89,7 +89,6 @@ int main() {
             const Vec3 screen_ray_ndf_coord = {(framebuffer_coord / Vec2{ resolution }) * Vec2{2, -2} + Vec2{-1, 1}, 1};
 
             Vec4 camera_ray_dir_viewspace_homog = inv_projection_mat * Vec4{screen_ray_ndf_coord, 1};
-            // todo: wtf is this negative
             Vec3 camera_ray_dir_viewspace = glm::normalize(Vec3{camera_ray_dir_viewspace_homog / camera_ray_dir_viewspace_homog.w});
 
             Vec3 camera_ray_dir_worldspace = Mat3{inv_view_mat} * camera_ray_dir_viewspace;
