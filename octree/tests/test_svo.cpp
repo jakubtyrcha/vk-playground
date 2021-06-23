@@ -110,10 +110,10 @@ TEMPLATE_TEST_CASE( "Can sample at the edges", "[svo][template]",
         require_approx_eq(s, Vec4{p, 1});
 
         Vec4 s0 = svo.sample_color_at_location_level(p * Vec3{2} - Vec3{1}, 0);
-        if constexpr(TestType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
+        if constexpr(TestType::SELF_BRICK_VOXEL_POS == BrickVoxelPosition::NodeCenter) {
             require_approx_eq(s0, Vec4{p, 1} * Vec4{1.f / 8.f});
         }
-        else if constexpr(TestType::BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
+        else if constexpr(TestType::SELF_BRICK_VOXEL_POS == BrickVoxelPosition::NodeCorner) {
             require_approx_eq(s0, Vec4{p, 1} * Vec4{8.f / 27.f});
         }
     }

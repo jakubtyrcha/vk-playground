@@ -53,7 +53,7 @@ struct ImageBuffer {
     }
 
     void store_color(Vec2i texel, Vec4 color) {
-        u8Vec4 qcolor = glm::clamp(color * Vec4{255}, {}, {255});
+        u8Vec4 qcolor = glm::clamp(color * Vec4{255}, {}, Vec4{255});
         data_[texel.x + texel.y * resolution_.x] = qcolor;
     }
 };
@@ -711,28 +711,28 @@ int main(int, char**)
             Mat4 projection_mat = glm::perspectiveFovLH_ZO(camera_fov_y, (f32)resolution.x, (f32)resolution.y, 1.f, 100.f);
             Mat4 inv_projection_mat = glm::inverse(projection_mat);
 
-            for (i32 y = 0; y < resolution.y; y++)
-            {
-                for (i32 x = 0; x < resolution.x; x++)
-                {
-                    const Vec2 framebuffer_coord = Vec2{x, y} + 0.5f;
-                    const Vec3 screen_ray_ndf_coord = {(framebuffer_coord / Vec2{resolution}) * Vec2{2, -2} + Vec2{-1, 1}, 1};
+            // for (i32 y = 0; y < resolution.y; y++)
+            // {
+            //     for (i32 x = 0; x < resolution.x; x++)
+            //     {
+            //         const Vec2 framebuffer_coord = Vec2{x, y} + 0.5f;
+            //         const Vec3 screen_ray_ndf_coord = {(framebuffer_coord / Vec2{resolution}) * Vec2{2, -2} + Vec2{-1, 1}, 1};
 
-                    Vec4 camera_ray_dir_viewspace_homog = inv_projection_mat * Vec4{screen_ray_ndf_coord, 1};
-                    // todo: wtf is this negative
-                    Vec3 camera_ray_dir_viewspace = glm::normalize(Vec3{camera_ray_dir_viewspace_homog / camera_ray_dir_viewspace_homog.w});
+            //         Vec4 camera_ray_dir_viewspace_homog = inv_projection_mat * Vec4{screen_ray_ndf_coord, 1};
+            //         // todo: wtf is this negative
+            //         Vec3 camera_ray_dir_viewspace = glm::normalize(Vec3{camera_ray_dir_viewspace_homog / camera_ray_dir_viewspace_homog.w});
 
-                    Vec3 camera_ray_dir_worldspace = Mat3{inv_view_mat} * camera_ray_dir_viewspace;
+            //         Vec3 camera_ray_dir_worldspace = Mat3{inv_view_mat} * camera_ray_dir_viewspace;
 
-                    Ray ray{.origin = camera_eye, .direction = camera_ray_dir_worldspace};
-                    if(auto result = Tracing::trace_svo_ray(svo, ray); result) {
-                        image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
-                    }
-                    else {
-                        //image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
-                    }
-                }
-            }
+            //         Ray ray{.origin = camera_eye, .direction = camera_ray_dir_worldspace};
+            //         if(auto result = Tracing::trace_svo_ray(svo, ray); result) {
+            //             image_buffer.store_color({x, y}, {Vec3{result->color}, 1});
+            //         }
+            //         else {
+            //             //image_buffer.store_color({x, y}, Vec4{0, 0, 0, 1});
+            //         }
+            //     }
+            // }
         }
 
         // Rendering

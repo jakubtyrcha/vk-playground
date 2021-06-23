@@ -1,4 +1,8 @@
-#include "math_helpers.h"
+#include "math_helpers.h" 
+
+bool Ray::operator == (Ray const& other) const {
+    return origin == other.origin && direction == other.direction;
+}
 
 Vec3 Obb::get_size() const
 {

@@ -33,7 +33,7 @@ struct ImageBuffer {
     }
 
     void store_color(Vec2i texel, Vec4 color) {
-        u8Vec4 qcolor = glm::clamp(color * Vec4{255}, {}, {255});
+        u8Vec4 qcolor = glm::clamp(color * Vec4{255}, {}, Vec4{255});
         data_[texel.x + texel.y * resolution_.x] = qcolor;
     }
 

@@ -33,7 +33,7 @@ struct Ray {
     Vec3 origin;
     Vec3 direction;
 
-    bool operator == (Ray const&) const = default;
+    bool operator == (Ray const&) const;
 };
 
 struct Plane {
