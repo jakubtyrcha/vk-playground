@@ -753,6 +753,16 @@ int main(int, char**)
     // Cleanup
     err = vkDeviceWaitIdle(g_Device);
     check_vk_result(err);
+
+    if (g_RenderResources.upload_buffer)
+    {
+        vkDestroyBuffer(g_Device, g_RenderResources.upload_buffer, g_Allocator);
+        vkFreeMemory(g_Device, g_RenderResources.upload_buffer_host_mem, g_Allocator);
+    }
+
+    g_RenderResources.upload_buffer = {};
+    g_RenderResources.upload_buffer_host_mem = {};
+
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
