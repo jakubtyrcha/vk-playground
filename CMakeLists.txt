@@ -6,4 +6,4 @@ set (CMAKE_CXX_STANDARD 20)
 find_package(Vulkan REQUIRED)
 
 add_subdirectory(ext)
-add_subdirectory(octree)
+add_subdirectory(svo)
